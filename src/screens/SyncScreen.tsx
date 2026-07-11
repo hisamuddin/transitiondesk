@@ -27,6 +27,7 @@ export function SyncScreen() {
   const [loading, setLoading] = useState(true);
   const [busyProvider, setBusyProvider] = useState<SourceType | null>(null);
   const [error, setError] = useState("");
+  const [autoConnectAttempted, setAutoConnectAttempted] = useState(false);
 
   useEffect(() => {
     if (!user?.id) {
@@ -42,6 +43,29 @@ export function SyncScreen() {
       activePortalCount: accounts.filter((account) => providerOrder.includes(account.provider) && account.status === "connected").length
     });
   }, [accounts, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !user.providerToken || loading || autoConnectAttempted) {
+      return;
+    }
+
+    const shouldAutoConnect = typeof window !== "undefined"
+      && new URLSearchParams(window.location.search).get("gmailConnect") === "1";
+
+    if (!shouldAutoConnect) {
+      return;
+    }
+
+    setAutoConnectAttempted(true);
+    window.history.replaceState({}, document.title, window.location.pathname);
+
+    const account = accounts.find((item) => item.provider === "emailParsing");
+    if (account?.status === "connected") {
+      return;
+    }
+
+    completeGmailConnect();
+  }, [accounts, autoConnectAttempted, loading, user?.id, user?.providerToken]);
 
   async function refreshWorkspace() {
     if (!user?.id) {
@@ -86,11 +110,29 @@ export function SyncScreen() {
         return;
       }
 
-      await connectPortalAccount(user.id, provider, { gmailAccessToken: user.providerToken });
+      await completeGmailConnect();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : `Could not connect ${labelFor(provider)}.`);
+    } finally {
+      setBusyProvider(null);
+    }
+  }
+
+  async function completeGmailConnect() {
+    if (!user?.id || !user.providerToken) {
+      await requestGmailReconnect();
+      return;
+    }
+
+    setBusyProvider("emailParsing");
+    setError("");
+
+    try {
+      await connectPortalAccount(user.id, "emailParsing", { gmailAccessToken: user.providerToken });
       await refreshWorkspace();
       Alert.alert("Email sync connected", "Gmail inbox access is now linked to this workspace.");
     } catch (caughtError) {
-      setError(caughtError instanceof Error ? caughtError.message : `Could not connect ${labelFor(provider)}.`);
+      setError(caughtError instanceof Error ? caughtError.message : "Could not connect Email Sync.");
     } finally {
       setBusyProvider(null);
     }
@@ -312,7 +354,7 @@ async function requestGmailReconnect() {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: window.location.origin,
+      redirectTo: `${window.location.origin}/MainTabs/Sync?gmailConnect=1`,
       scopes: [
         "openid",
         "email",

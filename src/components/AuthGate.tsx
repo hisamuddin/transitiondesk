@@ -11,6 +11,9 @@ type AuthGateProps = {
   children: ReactNode;
 };
 
+const GMAIL_PROVIDER_TOKEN_KEY = "transitiondesk.gmailProviderToken";
+const GMAIL_PROVIDER_REFRESH_TOKEN_KEY = "transitiondesk.gmailProviderRefreshToken";
+
 const AuthContext = createContext<GoogleUser | null>(null);
 
 export function useAuthUser() {
@@ -37,6 +40,10 @@ export function AuthGate({ children }: AuthGateProps) {
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
       const accessToken = hashParams.get("access_token");
       const refreshToken = hashParams.get("refresh_token");
+      const providerToken = hashParams.get("provider_token");
+      const providerRefreshToken = hashParams.get("provider_refresh_token");
+
+      rememberGmailProviderToken(providerToken, providerRefreshToken);
 
       if (accessToken && refreshToken) {
         await supabase.auth.setSession({
@@ -48,7 +55,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
       const { data } = await supabase.auth.getSession();
       if (data.session?.user) {
-        await syncProfile(data.session);
+        await syncProfile(data.session, providerToken ?? undefined, providerRefreshToken ?? undefined);
       }
       setLoading(false);
     }
@@ -69,7 +76,11 @@ export function AuthGate({ children }: AuthGateProps) {
     return () => data.subscription.unsubscribe();
   }, []);
 
-  async function syncProfile(session: Session | null) {
+  async function syncProfile(
+    session: Session | null,
+    providerTokenOverride?: string,
+    providerRefreshTokenOverride?: string
+  ) {
     if (!session?.user) {
       return;
     }
@@ -84,8 +95,9 @@ export function AuthGate({ children }: AuthGateProps) {
       isAdmin: adminEmails.includes(normalizedEmail),
       name: metadata.full_name ?? metadata.name ?? email,
       picture: metadata.avatar_url ?? metadata.picture,
-      providerToken: session.provider_token ?? undefined,
-      providerRefreshToken: session.provider_refresh_token ?? undefined,
+      providerToken: session.provider_token ?? providerTokenOverride ?? readStoredToken(GMAIL_PROVIDER_TOKEN_KEY),
+      providerRefreshToken:
+        session.provider_refresh_token ?? providerRefreshTokenOverride ?? readStoredToken(GMAIL_PROVIDER_REFRESH_TOKEN_KEY),
       authProvider: session.user.app_metadata?.provider
     } satisfies GoogleUser;
 
@@ -104,6 +116,35 @@ export function AuthGate({ children }: AuthGateProps) {
     }
   }
 
+function rememberGmailProviderToken(providerToken: string | null, providerRefreshToken: string | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    if (providerToken) {
+      window.sessionStorage.setItem(GMAIL_PROVIDER_TOKEN_KEY, providerToken);
+    }
+    if (providerRefreshToken) {
+      window.sessionStorage.setItem(GMAIL_PROVIDER_REFRESH_TOKEN_KEY, providerRefreshToken);
+    }
+  } catch {
+    // Session storage can be unavailable in private or restricted browser contexts.
+  }
+}
+
+function readStoredToken(key: string) {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  try {
+    return window.sessionStorage.getItem(key) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
   async function signInWithGoogle() {
     if (!supabase) {
       return;
@@ -113,16 +154,9 @@ export function AuthGate({ children }: AuthGateProps) {
       provider: "google",
       options: {
         redirectTo: window.location.origin,
-        scopes: [
-          "openid",
-          "email",
-          "profile",
-          "https://www.googleapis.com/auth/gmail.readonly"
-        ].join(" "),
+        scopes: ["openid", "email", "profile"].join(" "),
         queryParams: {
-          access_type: "offline",
-          include_granted_scopes: "true",
-          prompt: "consent"
+          include_granted_scopes: "true"
         }
       }
     });

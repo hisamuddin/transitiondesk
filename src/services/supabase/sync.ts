@@ -152,7 +152,11 @@ export async function connectPortalAccount(userId: string | undefined, provider:
 
     await logActivity(userId, "connect_source", { provider, method: nextAccount.sync_method }, "connected_account", data.id);
     return mapAccount(data);
-  } catch {
+  } catch (caughtError) {
+    if (provider === "emailParsing" && options.gmailAccessToken) {
+      throw caughtError;
+    }
+
     await logActivity(userId, "connect_source_demo", { provider, method: nextAccount.sync_method }, "connected_account", provider);
     return {
       id: `acct-${provider}-${userId.slice(0, 8)}`,
@@ -362,16 +366,21 @@ export async function syncConnectedAccount(userId: string | undefined, provider:
     const run = await createRun(userId, provider, "normalizing");
     const mappedFields = ["company", "role", "stage", "source", "notes", "attachments"];
     const rows = normalized.map((opportunity) => toOpportunityRow(userId, opportunity));
-    const { data: insertedRows, error: opportunityError } = await supabase
-      .from("opportunities")
-      .upsert(rows, { onConflict: "user_id,fingerprint" })
-      .select("*");
+    let inserted: any[] = [];
 
-    if (opportunityError) {
-      throw opportunityError;
+    if (rows.length) {
+      const { data: insertedRows, error: opportunityError } = await supabase
+        .from("opportunities")
+        .upsert(rows, { onConflict: "user_id,fingerprint" })
+        .select("*");
+
+      if (opportunityError) {
+        throw opportunityError;
+      }
+
+      inserted = insertedRows ?? [];
     }
 
-    const inserted = insertedRows ?? [];
     const eventRows = inserted.map((row) =>
       createSourceEvent(userId, provider, {
         ...normalized.find((item) => item.fingerprint === row.fingerprint)!,
@@ -379,19 +388,21 @@ export async function syncConnectedAccount(userId: string | undefined, provider:
       })
     );
 
-    const { error: eventError } = await supabase.from("source_events").insert(
-      eventRows.map((event) => ({
-        user_id: userId,
-        provider: event.provider,
-        event_type: event.eventType,
-        opportunity_id: event.opportunityId,
-        fingerprint: event.fingerprint,
-        payload: event.payload
-      }))
-    );
+    if (eventRows.length) {
+      const { error: eventError } = await supabase.from("source_events").insert(
+        eventRows.map((event) => ({
+          user_id: userId,
+          provider: event.provider,
+          event_type: event.eventType,
+          opportunity_id: event.opportunityId,
+          fingerprint: event.fingerprint,
+          payload: event.payload
+        }))
+      );
 
-    if (eventError) {
-      throw eventError;
+      if (eventError) {
+        throw eventError;
+      }
     }
 
     const { error: accountError } = await supabase
@@ -438,6 +449,10 @@ export async function syncConnectedAccount(userId: string | undefined, provider:
       events: eventRows
     };
   } catch (error) {
+    if (provider === "emailParsing" && options.gmailAccessToken) {
+      throw error;
+    }
+
     await logActivity(
       userId,
       "sync_source_demo",
