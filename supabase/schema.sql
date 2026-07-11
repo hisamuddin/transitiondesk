@@ -67,32 +67,39 @@ as $$
   );
 $$;
 
+drop policy if exists "Users can read own profile" on public.profiles;
 create policy "Users can read own profile"
   on public.profiles for select
   using (auth.uid() = id or public.is_admin());
 
+drop policy if exists "Users can upsert own profile" on public.profiles;
 create policy "Users can upsert own profile"
   on public.profiles for insert
   with check (auth.uid() = id);
 
+drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile"
   on public.profiles for update
   using (auth.uid() = id or public.is_admin());
 
+drop policy if exists "Users own opportunities" on public.opportunities;
 create policy "Users own opportunities"
   on public.opportunities for all
   using (auth.uid() = user_id or public.is_admin())
   with check (auth.uid() = user_id or public.is_admin());
 
+drop policy if exists "Users own interviews" on public.interviews;
 create policy "Users own interviews"
   on public.interviews for all
   using (auth.uid() = user_id or public.is_admin())
   with check (auth.uid() = user_id or public.is_admin());
 
+drop policy if exists "Users can insert own activity" on public.activity_events;
 create policy "Users can insert own activity"
   on public.activity_events for insert
   with check (auth.uid() = user_id);
 
+drop policy if exists "Users can read own activity and admins read all" on public.activity_events;
 create policy "Users can read own activity and admins read all"
   on public.activity_events for select
   using (auth.uid() = user_id or public.is_admin());
