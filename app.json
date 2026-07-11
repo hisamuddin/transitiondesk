@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "Career Transition OS",
+    "slug": "career-transition-os",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "careertransitionos",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCalendarsUsageDescription": "Career Transition OS adds interview reminders to your calendar.",
+        "NSDocumentsFolderUsageDescription": "Career Transition OS stores resumes and cover letters you attach to opportunities."
+      }
+    },
+    "android": {
+      "permissions": [
+        "READ_CALENDAR",
+        "WRITE_CALENDAR"
+      ]
+    },
+    "plugins": [
+      "expo-font"
+    ]
+  }
+}
