@@ -15,8 +15,13 @@ import {
   labelForProvider,
   normalizeApplication
 } from "../sync/syncEngine";
+import { fetchGmailApplications, fetchGmailProfile } from "../sync/gmailSync";
 import { logActivity } from "./activity";
 import { supabase } from "./client";
+
+type SyncOptions = {
+  gmailAccessToken?: string;
+};
 
 function mapAccount(row: any): ConnectedAccount {
   return {
@@ -89,22 +94,36 @@ export async function loadConnectedAccounts(userId: string | undefined) {
   }
 }
 
-export async function connectPortalAccount(userId: string | undefined, provider: SourceType) {
+export async function connectPortalAccount(userId: string | undefined, provider: SourceType, options: SyncOptions = {}) {
   if (!userId) {
     return null;
   }
+
+  const gmailProfile = provider === "emailParsing" && options.gmailAccessToken
+    ? await fetchGmailProfile(options.gmailAccessToken)
+    : null;
 
   const nextAccount = {
     user_id: userId,
     provider,
     status: "connected",
     sync_method: defaultSyncMethodForProvider(provider),
-    external_account_id: `${provider}-workspace-${userId.slice(0, 8)}`,
-    token_reference: `${provider}-demo-token`,
-    scopes: defaultSyncMethodForProvider(provider) === "official_api" ? ["applications.read"] : ["mail.read"],
+    external_account_id: gmailProfile?.emailAddress ?? `${provider}-workspace-${userId.slice(0, 8)}`,
+    token_reference: provider === "emailParsing" ? "google-session-token" : `${provider}-demo-token`,
+    scopes: provider === "emailParsing"
+      ? ["openid", "email", "profile", "https://www.googleapis.com/auth/gmail.readonly"]
+      : defaultSyncMethodForProvider(provider) === "official_api"
+        ? ["applications.read"]
+        : ["mail.read"],
     imported_count: 0,
-    sync_state: defaultSyncMethodForProvider(provider) === "official_api" ? "Ready for API sync" : "Email fallback active",
-    notes: descriptionForProvider(provider)
+    sync_state: provider === "emailParsing"
+      ? "Gmail inbox access ready"
+      : defaultSyncMethodForProvider(provider) === "official_api"
+        ? "Ready for API sync"
+        : "Email fallback active",
+    notes: provider === "emailParsing"
+      ? `Connected to ${gmailProfile?.emailAddress ?? "Google inbox"} for real email-based application sync.`
+      : descriptionForProvider(provider)
   };
 
   if (!supabase) {
@@ -298,12 +317,14 @@ function toOpportunityRow(userId: string, opportunity: Opportunity) {
   };
 }
 
-export async function syncConnectedAccount(userId: string | undefined, provider: SourceType) {
+export async function syncConnectedAccount(userId: string | undefined, provider: SourceType, options: SyncOptions = {}) {
   if (!userId) {
     return null;
   }
 
-  const rawApplications = getDemoRawApplications(provider);
+  const rawApplications = provider === "emailParsing" && options.gmailAccessToken
+    ? await fetchGmailApplications(options.gmailAccessToken)
+    : getDemoRawApplications(provider);
   const normalized = rawApplications.map((raw) => normalizeApplication(raw, `${provider}-workspace-${userId.slice(0, 8)}`));
 
   if (!supabase) {

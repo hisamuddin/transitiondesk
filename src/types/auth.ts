@@ -4,4 +4,7 @@ export type GoogleUser = {
   isAdmin?: boolean;
   name: string;
   picture?: string;
+  providerToken?: string;
+  providerRefreshToken?: string;
+  authProvider?: string;
 };

@@ -10,7 +10,7 @@ import {
   SyncSource
 } from "../../types/career";
 
-type RawJobApplication = {
+export type RawJobApplication = {
   source: SourceType;
   sourceJobId: string;
   companyName?: string;
@@ -22,6 +22,7 @@ type RawJobApplication = {
   contact?: string;
   notes?: string;
   attachments?: string[];
+  receivedAt?: string;
 };
 
 const providerLabels: Record<SourceType, string> = {
@@ -184,7 +185,7 @@ export function normalizeApplication(raw: RawJobApplication, sourceAccountId?: s
     source: raw.source,
     location: raw.city ?? "Remote",
     nextAction: stage === "applied" ? "Set a follow-up reminder." : "Review imported application.",
-    createdAt: now,
+    createdAt: raw.receivedAt ?? now,
     updatedAt: now,
     matchScore: stage === "offer" ? 92 : stage === "interviewing" ? 86 : 78,
     contactName: raw.contact,

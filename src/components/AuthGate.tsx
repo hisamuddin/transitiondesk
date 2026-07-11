@@ -5,6 +5,7 @@ import { logActivity } from "../services/supabase/activity";
 import { adminEmails, isSupabaseConfigured, supabase } from "../services/supabase/client";
 import { colors } from "../theme/colors";
 import { GoogleUser } from "../types/auth";
+import { Session } from "@supabase/supabase-js";
 
 type AuthGateProps = {
   children: ReactNode;
@@ -47,7 +48,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
       const { data } = await supabase.auth.getSession();
       if (data.session?.user) {
-        await syncProfile(data.session.user.id, data.session.user.email ?? "", data.session.user.user_metadata);
+        await syncProfile(data.session);
       }
       setLoading(false);
     }
@@ -59,7 +60,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        syncProfile(session.user.id, session.user.email ?? "", session.user.user_metadata);
+        syncProfile(session);
       } else {
         setUser(null);
       }
@@ -68,15 +69,25 @@ export function AuthGate({ children }: AuthGateProps) {
     return () => data.subscription.unsubscribe();
   }, []);
 
-  async function syncProfile(id: string, email: string, metadata: Record<string, any> = {}) {
+  async function syncProfile(session: Session | null) {
+    if (!session?.user) {
+      return;
+    }
+
+    const id = session.user.id;
+    const email = session.user.email ?? "";
+    const metadata = session.user.user_metadata ?? {};
     const normalizedEmail = email.toLowerCase();
     const nextUser = {
       email,
       id,
       isAdmin: adminEmails.includes(normalizedEmail),
       name: metadata.full_name ?? metadata.name ?? email,
-      picture: metadata.avatar_url ?? metadata.picture
-    };
+      picture: metadata.avatar_url ?? metadata.picture,
+      providerToken: session.provider_token ?? undefined,
+      providerRefreshToken: session.provider_refresh_token ?? undefined,
+      authProvider: session.user.app_metadata?.provider
+    } satisfies GoogleUser;
 
     setUser(nextUser);
 
@@ -101,7 +112,18 @@ export function AuthGate({ children }: AuthGateProps) {
     const { error: signInError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: window.location.origin
+        redirectTo: window.location.origin,
+        scopes: [
+          "openid",
+          "email",
+          "profile",
+          "https://www.googleapis.com/auth/gmail.readonly"
+        ].join(" "),
+        queryParams: {
+          access_type: "offline",
+          include_granted_scopes: "true",
+          prompt: "consent"
+        }
       }
     });
 

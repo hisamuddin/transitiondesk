@@ -7,6 +7,7 @@ import { useAuthUser } from "../components/AuthGate";
 import { MetricCard } from "../components/MetricCard";
 import { Screen } from "../components/Screen";
 import { logActivity } from "../services/supabase/activity";
+import { supabase } from "../services/supabase/client";
 import {
   connectPortalAccount,
   loadConnectedAccounts,
@@ -17,7 +18,7 @@ import { summarizeSyncHealth } from "../services/sync/syncEngine";
 import { colors } from "../theme/colors";
 import { ConnectedAccount, SourceType, SyncRun } from "../types/career";
 
-const providerOrder: SourceType[] = ["linkedin", "naukri", "indeed", "shine"];
+const providerOrder: SourceType[] = ["emailParsing", "browserExtension", "manual"];
 
 export function SyncScreen() {
   const user = useAuthUser();
@@ -37,7 +38,9 @@ export function SyncScreen() {
   }, [user?.id]);
 
   useEffect(() => {
-    logActivity(user?.id, "view_sync", { activePortalCount: accounts.filter((account) => account.status === "connected").length });
+    logActivity(user?.id, "view_sync", {
+      activePortalCount: accounts.filter((account) => providerOrder.includes(account.provider) && account.status === "connected").length
+    });
   }, [accounts, user?.id]);
 
   async function refreshWorkspace() {
@@ -64,13 +67,28 @@ export function SyncScreen() {
       return;
     }
 
+    if (provider !== "emailParsing") {
+      Alert.alert(
+        labelFor(provider),
+        provider === "browserExtension"
+          ? "Browser Sync is planned as a real capture flow from your browser session and confirmation pages. It is not live yet."
+          : "Manual Import will land as a CSV and resume package importer. It is not live yet."
+      );
+      return;
+    }
+
     setBusyProvider(provider);
     setError("");
 
     try {
-      await connectPortalAccount(user.id, provider);
+      if (!user.providerToken) {
+        await requestGmailReconnect();
+        return;
+      }
+
+      await connectPortalAccount(user.id, provider, { gmailAccessToken: user.providerToken });
       await refreshWorkspace();
-      Alert.alert("Source connected", `${labelFor(provider)} is now linked to this workspace.`);
+      Alert.alert("Email sync connected", "Gmail inbox access is now linked to this workspace.");
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : `Could not connect ${labelFor(provider)}.`);
     } finally {
@@ -83,15 +101,25 @@ export function SyncScreen() {
       return;
     }
 
+    if (provider !== "emailParsing") {
+      Alert.alert("Not live yet", `${labelFor(provider)} is still planned and does not sync real data yet.`);
+      return;
+    }
+
     setBusyProvider(provider);
     setError("");
 
     try {
-      const result = await syncConnectedAccount(user.id, provider);
+      if (!user.providerToken) {
+        await requestGmailReconnect();
+        return;
+      }
+
+      const result = await syncConnectedAccount(user.id, provider, { gmailAccessToken: user.providerToken });
       await refreshWorkspace();
       Alert.alert(
         "Sync completed",
-        `${labelFor(provider)} imported ${result?.run.importedCount ?? 0} records into the unified database.`
+        `Email Sync imported ${result?.run.importedCount ?? 0} records into the unified database.`
       );
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : `Could not sync ${labelFor(provider)}.`);
@@ -100,13 +128,15 @@ export function SyncScreen() {
     }
   }
 
-  const health = summarizeSyncHealth(accounts, runs);
+  const visibleAccounts = accounts.filter((account) => providerOrder.includes(account.provider));
+  const visibleRuns = runs.filter((run) => providerOrder.includes(run.source));
+  const health = summarizeSyncHealth(visibleAccounts, visibleRuns);
 
   return (
     <Screen>
       <View>
-        <Text style={styles.eyebrow}>Job portal sync</Text>
-        <Text style={styles.title}>Connect accounts</Text>
+        <Text style={styles.eyebrow}>Unified sync</Text>
+        <Text style={styles.title}>Honest sync sources</Text>
       </View>
 
       <View style={styles.metrics}>
@@ -121,8 +151,8 @@ export function SyncScreen() {
           <Text style={styles.flowTitle}>Normalize and map fields</Text>
         </View>
         <Text style={styles.flowText}>
-          Google signs the user in. Each portal is then linked separately, synced into one canonical opportunity model, and tracked
-          with raw source events plus sync history.
+          Google signs the user in. Gmail sync is live now and pulls job-related emails into one canonical opportunity model.
+          Browser Sync and Manual Import are shown honestly as next steps, not as fake integrations.
         </Text>
       </AppCard>
 
@@ -133,7 +163,7 @@ export function SyncScreen() {
       ) : null}
 
       <View style={styles.sectionRow}>
-        <Text style={styles.sectionTitle}>Connected portals</Text>
+        <Text style={styles.sectionTitle}>Available sync methods</Text>
         <Pressable style={styles.refreshButton} onPress={refreshWorkspace}>
           <Text style={styles.refreshButtonText}>Refresh</Text>
         </Pressable>
@@ -147,57 +177,67 @@ export function SyncScreen() {
       ) : null}
 
       {!loading && providerOrder.map((provider) => {
-        const account = accounts.find((item) => item.provider === provider);
+        const account = visibleAccounts.find((item) => item.provider === provider);
         const isConnected = account?.status === "connected" || account?.status === "attention";
         const isBusy = busyProvider === provider;
+        const isLive = provider === "emailParsing";
 
         return (
           <AppCard key={provider}>
             <View style={styles.row}>
               <View style={styles.rowCopy}>
                 <Text style={styles.rowTitle}>{account?.label ?? labelFor(provider)}</Text>
+                <Text style={styles.rowMeta}>{account?.notes ?? defaultCardCopy(provider, isConnected)}</Text>
                 <Text style={styles.rowMeta}>
-                  {account?.notes ?? (isConnected
-                    ? `${labelFor(provider)} is ready to keep the unified pipeline current.`
-                    : "No connection yet. Connect the portal to start importing opportunities.")}
-                </Text>
-                <Text style={styles.rowMeta}>
-                  Method: {formatMethod(account?.method)} {account?.lastSyncedAt ? `- Last sync ${new Date(account.lastSyncedAt).toLocaleString()}` : ""}
+                  {isLive
+                    ? `Method: ${formatMethod(account?.method)} ${account?.lastSyncedAt ? `- Last sync ${new Date(account.lastSyncedAt).toLocaleString()}` : ""}`
+                    : "Status: planned next phase"}
                 </Text>
               </View>
-              <Text style={[styles.status, styleForStatus(account?.status).container, styleForStatus(account?.status).text]}>
-                {labelForStatus(account?.status)}
+              <Text style={[styles.status, isLive ? styleForStatus(account?.status).container : styles.planned, isLive ? styleForStatus(account?.status).text : styles.plannedText]}>
+                {isLive ? labelForStatus(account?.status) : "Planned"}
               </Text>
             </View>
 
-            <View style={styles.actions}>
-              <Pressable
-                style={[styles.primaryButton, isBusy && styles.buttonDisabled]}
-                onPress={() => handleConnect(provider)}
-                disabled={isBusy}
-              >
-                <Text style={styles.primaryButtonText}>{isConnected ? "Reconnect" : "Connect"}</Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.secondaryButton,
-                  (!isConnected || isBusy) && styles.buttonDisabled,
-                  !isConnected && styles.secondaryButtonDisabled
-                ]}
-                onPress={() => handleSync(provider)}
-                disabled={!isConnected || isBusy}
-              >
-                <Text style={[styles.secondaryButtonText, !isConnected && styles.secondaryButtonTextDisabled]}>
-                  {isBusy ? "Working..." : "Sync now"}
+            {isLive ? (
+              <View style={styles.actions}>
+                <Pressable
+                  style={[styles.primaryButton, isBusy && styles.buttonDisabled]}
+                  onPress={() => handleConnect(provider)}
+                  disabled={isBusy}
+                >
+                  <Text style={styles.primaryButtonText}>{isConnected ? "Reconnect Gmail" : "Connect Gmail"}</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.secondaryButton,
+                    (!isConnected || isBusy) && styles.buttonDisabled,
+                    !isConnected && styles.secondaryButtonDisabled
+                  ]}
+                  onPress={() => handleSync(provider)}
+                  disabled={!isConnected || isBusy}
+                >
+                  <Text style={[styles.secondaryButtonText, !isConnected && styles.secondaryButtonTextDisabled]}>
+                    {isBusy ? "Working..." : "Sync inbox"}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.placeholderRow}>
+                <Ionicons name="time-outline" size={16} color={colors.muted} />
+                <Text style={styles.placeholderText}>
+                  {provider === "browserExtension"
+                    ? "Next we can add browser capture from confirmation pages or a Chrome extension."
+                    : "Next we can add CSV upload for exported applications, resumes, and notes."}
                 </Text>
-              </Pressable>
-            </View>
+              </View>
+            )}
           </AppCard>
         );
       })}
 
       <Text style={styles.sectionTitle}>Recent sync runs</Text>
-      {runs.map((run) => (
+      {visibleRuns.map((run) => (
         <AppCard key={run.id} tone={run.status === "completed" ? "green" : run.status === "failed" ? "amber" : "blue"}>
           <Text style={styles.rowTitle}>{labelFor(run.source)}</Text>
           <Text style={styles.rowMeta}>
@@ -216,10 +256,24 @@ function labelFor(provider: SourceType) {
     naukri: "Naukri",
     indeed: "Indeed",
     shine: "Shine",
-    browserExtension: "Browser extension",
-    emailParsing: "Email parsing",
-    manual: "Manual"
+    browserExtension: "Browser Sync",
+    emailParsing: "Email Sync",
+    manual: "Manual Import"
   }[provider];
+}
+
+function defaultCardCopy(provider: SourceType, isConnected: boolean) {
+  if (provider === "emailParsing") {
+    return isConnected
+      ? "Gmail-based application sync is ready and can pull recruiter emails, confirmations, and interview updates."
+      : "Connect Gmail to sync real application emails into the unified pipeline.";
+  }
+
+  if (provider === "browserExtension") {
+    return "This will become a real browser capture flow for job confirmations and saved applications.";
+  }
+
+  return "This will become a real CSV import flow for exported applications, resumes, and notes.";
 }
 
 function formatMethod(method: ConnectedAccount["method"] | undefined) {
@@ -248,6 +302,34 @@ function styleForStatus(status: ConnectedAccount["status"] | undefined) {
   }
 
   return { container: styles.disconnected, text: styles.disconnectedText };
+}
+
+async function requestGmailReconnect() {
+  if (!supabase || typeof window === "undefined") {
+    return;
+  }
+
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: window.location.origin,
+      scopes: [
+        "openid",
+        "email",
+        "profile",
+        "https://www.googleapis.com/auth/gmail.readonly"
+      ].join(" "),
+      queryParams: {
+        access_type: "offline",
+        include_granted_scopes: "true",
+        prompt: "consent"
+      }
+    }
+  });
+
+  if (error) {
+    throw error;
+  }
 }
 
 const styles = StyleSheet.create({
@@ -355,6 +437,14 @@ const styles = StyleSheet.create({
   disconnectedText: {
     color: colors.red
   },
+  planned: {
+    backgroundColor: colors.background,
+    borderColor: colors.line,
+    borderWidth: 1
+  },
+  plannedText: {
+    color: colors.muted
+  },
   actions: {
     flexDirection: "row",
     gap: 10,
@@ -396,5 +486,17 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.6
+  },
+  placeholderRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 14
+  },
+  placeholderText: {
+    color: colors.muted,
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 19
   }
 });
