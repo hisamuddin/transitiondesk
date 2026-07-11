@@ -148,6 +148,7 @@ export function SyncScreen() {
 
       {!loading && providerOrder.map((provider) => {
         const account = accounts.find((item) => item.provider === provider);
+        const isConnected = account?.status === "connected" || account?.status === "attention";
         const isBusy = busyProvider === provider;
 
         return (
@@ -156,7 +157,9 @@ export function SyncScreen() {
               <View style={styles.rowCopy}>
                 <Text style={styles.rowTitle}>{account?.label ?? labelFor(provider)}</Text>
                 <Text style={styles.rowMeta}>
-                  {account?.notes ?? "No connection yet. Connect the portal to start importing opportunities."}
+                  {account?.notes ?? (isConnected
+                    ? `${labelFor(provider)} is ready to keep the unified pipeline current.`
+                    : "No connection yet. Connect the portal to start importing opportunities.")}
                 </Text>
                 <Text style={styles.rowMeta}>
                   Method: {formatMethod(account?.method)} {account?.lastSyncedAt ? `- Last sync ${new Date(account.lastSyncedAt).toLocaleString()}` : ""}
@@ -173,18 +176,18 @@ export function SyncScreen() {
                 onPress={() => handleConnect(provider)}
                 disabled={isBusy}
               >
-                <Text style={styles.primaryButtonText}>{account ? "Reconnect" : "Connect"}</Text>
+                <Text style={styles.primaryButtonText}>{isConnected ? "Reconnect" : "Connect"}</Text>
               </Pressable>
               <Pressable
                 style={[
                   styles.secondaryButton,
-                  (!account || isBusy) && styles.buttonDisabled,
-                  !account && styles.secondaryButtonDisabled
+                  (!isConnected || isBusy) && styles.buttonDisabled,
+                  !isConnected && styles.secondaryButtonDisabled
                 ]}
                 onPress={() => handleSync(provider)}
-                disabled={!account || isBusy}
+                disabled={!isConnected || isBusy}
               >
-                <Text style={[styles.secondaryButtonText, !account && styles.secondaryButtonTextDisabled]}>
+                <Text style={[styles.secondaryButtonText, !isConnected && styles.secondaryButtonTextDisabled]}>
                   {isBusy ? "Working..." : "Sync now"}
                 </Text>
               </Pressable>
