@@ -1,5 +1,5 @@
 import { ReactNode, useEffect, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 
 import { getGoogleClientId, renderGoogleButton } from "../services/auth/googleWebAuth";
 import { colors } from "../theme/colors";
@@ -51,9 +51,6 @@ export function AuthGate({ children }: AuthGateProps) {
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <Pressable style={styles.demoButton} onPress={() => setUser({ email: "demo@local", name: "Demo User" })}>
-          <Text style={styles.demoButtonText}>Preview without Google</Text>
-        </Pressable>
       </View>
     </View>
   );
@@ -124,18 +121,4 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: 12
   },
-  demoButton: {
-    alignItems: "center",
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
-    justifyContent: "center",
-    marginTop: 16,
-    minHeight: 44
-  },
-  demoButtonText: {
-    color: colors.blue,
-    fontSize: 13,
-    fontWeight: "900"
-  }
 });
