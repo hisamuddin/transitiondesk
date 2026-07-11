@@ -19,6 +19,8 @@ import { colors } from "../theme/colors";
 import { ConnectedAccount, SourceType, SyncRun } from "../types/career";
 
 const providerOrder: SourceType[] = ["emailParsing", "browserExtension", "manual"];
+const GMAIL_PROVIDER_TOKEN_KEY = "transitiondesk.gmailProviderToken";
+const GMAIL_PROVIDER_REFRESH_TOKEN_KEY = "transitiondesk.gmailProviderRefreshToken";
 
 export function SyncScreen() {
   const user = useAuthUser();
@@ -105,12 +107,8 @@ export function SyncScreen() {
     setError("");
 
     try {
-      if (!user.providerToken) {
-        await requestGmailReconnect();
-        return;
-      }
-
-      await completeGmailConnect();
+      clearStoredGmailToken();
+      await requestGmailReconnect();
     } catch (caughtError) {
       setError(caughtError instanceof Error ? caughtError.message : `Could not connect ${labelFor(provider)}.`);
     } finally {
@@ -371,6 +369,19 @@ async function requestGmailReconnect() {
 
   if (error) {
     throw error;
+  }
+}
+
+function clearStoredGmailToken() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.removeItem(GMAIL_PROVIDER_TOKEN_KEY);
+    window.sessionStorage.removeItem(GMAIL_PROVIDER_REFRESH_TOKEN_KEY);
+  } catch {
+    // Session storage can be unavailable in private or restricted browser contexts.
   }
 }
 

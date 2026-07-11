@@ -42,8 +42,7 @@ export function AuthGate({ children }: AuthGateProps) {
       const refreshToken = hashParams.get("refresh_token");
       const providerToken = hashParams.get("provider_token");
       const providerRefreshToken = hashParams.get("provider_refresh_token");
-
-      rememberGmailProviderToken(providerToken, providerRefreshToken);
+      const isGmailConnectReturn = new URLSearchParams(window.location.search).get("gmailConnect") === "1";
 
       if (accessToken && refreshToken) {
         await supabase.auth.setSession({
@@ -54,8 +53,18 @@ export function AuthGate({ children }: AuthGateProps) {
       }
 
       const { data } = await supabase.auth.getSession();
+      rememberGmailProviderToken(
+        providerToken ?? (isGmailConnectReturn ? data.session?.provider_token ?? null : null),
+        providerRefreshToken ?? (isGmailConnectReturn ? data.session?.provider_refresh_token ?? null : null)
+      );
+
       if (data.session?.user) {
-        await syncProfile(data.session, providerToken ?? undefined, providerRefreshToken ?? undefined);
+        await syncProfile(
+          data.session,
+          providerToken ?? undefined,
+          providerRefreshToken ?? undefined,
+          isGmailConnectReturn
+        );
       }
       setLoading(false);
     }
@@ -79,7 +88,8 @@ export function AuthGate({ children }: AuthGateProps) {
   async function syncProfile(
     session: Session | null,
     providerTokenOverride?: string,
-    providerRefreshTokenOverride?: string
+    providerRefreshTokenOverride?: string,
+    isGmailConnectReturn = false
   ) {
     if (!session?.user) {
       return;
@@ -95,9 +105,14 @@ export function AuthGate({ children }: AuthGateProps) {
       isAdmin: adminEmails.includes(normalizedEmail),
       name: metadata.full_name ?? metadata.name ?? email,
       picture: metadata.avatar_url ?? metadata.picture,
-      providerToken: session.provider_token ?? providerTokenOverride ?? readStoredToken(GMAIL_PROVIDER_TOKEN_KEY),
+      providerToken:
+        providerTokenOverride ??
+        (isGmailConnectReturn ? session.provider_token ?? undefined : undefined) ??
+        readStoredToken(GMAIL_PROVIDER_TOKEN_KEY),
       providerRefreshToken:
-        session.provider_refresh_token ?? providerRefreshTokenOverride ?? readStoredToken(GMAIL_PROVIDER_REFRESH_TOKEN_KEY),
+        providerRefreshTokenOverride ??
+        (isGmailConnectReturn ? session.provider_refresh_token ?? undefined : undefined) ??
+        readStoredToken(GMAIL_PROVIDER_REFRESH_TOKEN_KEY),
       authProvider: session.user.app_metadata?.provider
     } satisfies GoogleUser;
 
