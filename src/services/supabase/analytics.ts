@@ -3,8 +3,10 @@ import { supabase } from "./client";
 export type AdminAnalytics = {
   active_users_7d: number;
   total_activity_events: number;
+  total_connected_accounts: number;
   total_interviews: number;
   total_opportunities: number;
+  total_sync_runs: number;
   total_users: number;
 };
 

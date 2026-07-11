@@ -1,6 +1,6 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { AppCard } from "../components/AppCard";
@@ -10,23 +10,46 @@ import { OpportunityCard } from "../components/OpportunityCard";
 import { Screen } from "../components/Screen";
 import { followUps, interviews, opportunities } from "../data/seed";
 import { RootStackParamList } from "../navigation/types";
+import { loadUserOpportunities } from "../services/supabase/opportunities";
+import { loadConnectedAccounts } from "../services/supabase/sync";
 import { logActivity } from "../services/supabase/activity";
 import { colors } from "../theme/colors";
+import { ConnectedAccount, Opportunity } from "../types/career";
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
 export function DashboardScreen() {
   const navigation = useNavigation<Navigation>();
   const user = useAuthUser();
-  const active = opportunities.filter((opportunity) => opportunity.stage !== "closed");
+  const [workspaceOpportunities, setWorkspaceOpportunities] = useState<Opportunity[]>(opportunities);
+  const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
+
+  const active = workspaceOpportunities.filter((opportunity) => opportunity.stage !== "closed");
   const followUpsDue = followUps.filter((task) => !task.completed);
   const attention = [...active]
     .sort((left, right) => (left.followUpDueAt ?? "9999").localeCompare(right.followUpDueAt ?? "9999"))
     .slice(0, 3);
 
   useEffect(() => {
-    logActivity(user?.id, "view_dashboard", { activeCount: active.length, followUpsDue: followUpsDue.length });
+    if (!user?.id) {
+      return;
+    }
+
+    Promise.all([loadUserOpportunities(user.id), loadConnectedAccounts(user.id)])
+      .then(([nextOpportunities, nextAccounts]) => {
+        if (nextOpportunities && nextOpportunities.length > 0) {
+          setWorkspaceOpportunities(nextOpportunities);
+        }
+        setAccounts(nextAccounts);
+      })
+      .catch(() => {
+        setWorkspaceOpportunities(opportunities);
+      });
   }, [user?.id]);
+
+  useEffect(() => {
+    logActivity(user?.id, "view_dashboard", { activeCount: active.length, followUpsDue: followUpsDue.length });
+  }, [active.length, followUpsDue.length, user?.id]);
 
   return (
     <Screen>
@@ -38,7 +61,11 @@ export function DashboardScreen() {
       <AppCard tone="blue">
         <Text style={styles.cardLabel}>Active transition workspace</Text>
         <Text style={styles.heroTitle}>Senior product design search</Text>
-        <Text style={styles.heroText}>Portal sync, reminders, resumes, interviews, and offer notes in one mobile flow.</Text>
+        <Text style={styles.heroText}>
+          {accounts.length > 0
+            ? `${accounts.filter((account) => account.status === "connected").length} connected sources are feeding your unified pipeline.`
+            : "Portal sync, reminders, resumes, interviews, and offer notes in one mobile flow."}
+        </Text>
       </AppCard>
 
       <View style={styles.metrics}>

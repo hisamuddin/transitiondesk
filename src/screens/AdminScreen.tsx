@@ -72,6 +72,8 @@ export function AdminScreen() {
         <MetricCard label="Active" value={analytics?.active_users_7d ?? "-"} caption="last 7 days" tone="green" />
         <MetricCard label="Opps" value={analytics?.total_opportunities ?? "-"} caption="tracked roles" tone="blue" />
         <MetricCard label="Events" value={analytics?.total_activity_events ?? "-"} caption="activity logs" tone="violet" />
+        <MetricCard label="Links" value={analytics?.total_connected_accounts ?? "-"} caption="connected sources" tone="amber" />
+        <MetricCard label="Syncs" value={analytics?.total_sync_runs ?? "-"} caption="run history" tone="green" />
       </View>
 
       <Text style={styles.sectionTitle}>Recent activity</Text>

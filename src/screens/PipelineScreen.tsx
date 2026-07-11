@@ -1,14 +1,16 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
+import { useAuthUser } from "../components/AuthGate";
 import { OpportunityCard } from "../components/OpportunityCard";
 import { Screen } from "../components/Screen";
 import { opportunities } from "../data/seed";
 import { RootStackParamList } from "../navigation/types";
+import { loadUserOpportunities } from "../services/supabase/opportunities";
 import { colors } from "../theme/colors";
-import { OpportunityStage } from "../types/career";
+import { Opportunity, OpportunityStage } from "../types/career";
 
 type Filter = "all" | OpportunityStage;
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
@@ -17,10 +19,29 @@ const filters: Filter[] = ["all", "saved", "applied", "recruiter", "interviewing
 
 export function PipelineScreen() {
   const navigation = useNavigation<Navigation>();
+  const user = useAuthUser();
   const [filter, setFilter] = useState<Filter>("all");
+  const [workspaceOpportunities, setWorkspaceOpportunities] = useState<Opportunity[]>(opportunities);
+
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+
+    loadUserOpportunities(user.id)
+      .then((nextOpportunities) => {
+        if (nextOpportunities && nextOpportunities.length > 0) {
+          setWorkspaceOpportunities(nextOpportunities);
+        }
+      })
+      .catch(() => {
+        setWorkspaceOpportunities(opportunities);
+      });
+  }, [user?.id]);
+
   const filtered = useMemo(
-    () => opportunities.filter((opportunity) => filter === "all" || opportunity.stage === filter),
-    [filter]
+    () => workspaceOpportunities.filter((opportunity) => filter === "all" || opportunity.stage === filter),
+    [filter, workspaceOpportunities]
   );
 
   return (

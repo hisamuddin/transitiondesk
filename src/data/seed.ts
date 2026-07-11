@@ -1,8 +1,10 @@
 import {
+  ConnectedAccount,
   FollowUpTask,
   Interview,
   Opportunity,
   ResumeVersion,
+  SourceEvent,
   SyncRun,
   SyncSource
 } from "../types/career";
@@ -26,6 +28,12 @@ export const opportunities: Opportunity[] = [
     contactName: "Maya Chen",
     contactChannel: "LinkedIn",
     notes: "Recruiter values design systems plus product strategy."
+    ,
+    sourceAccountId: "acct-linkedin-demo",
+    sourceJobId: "li-23991",
+    fingerprint: "linkedin::li-23991::figma::senior-product-designer",
+    lastSourceSyncAt: "2026-07-11T08:42:00+05:30",
+    attachments: ["resume-saas.pdf", "case-study-portfolio.pdf"]
   },
   {
     id: "opp-microsoft",
@@ -43,7 +51,11 @@ export const opportunities: Opportunity[] = [
     matchScore: 81,
     contactName: "Anika Rao",
     contactChannel: "Email",
-    notes: "Email parser found recruiter thread and role description."
+    notes: "Email parser found recruiter thread and role description.",
+    sourceAccountId: "acct-email-demo",
+    sourceJobId: "mail-microsoft-thread-1",
+    fingerprint: "emailParsing::mail-microsoft-thread-1::microsoft::product-designer-ii",
+    lastSourceSyncAt: "2026-07-11T08:47:00+05:30"
   },
   {
     id: "opp-ramp",
@@ -61,7 +73,11 @@ export const opportunities: Opportunity[] = [
     matchScore: 78,
     contactName: "Leo Grant",
     contactChannel: "Email",
-    notes: "Browser extension captured application confirmation page."
+    notes: "Browser extension captured application confirmation page.",
+    sourceAccountId: "acct-browser-demo",
+    sourceJobId: "browser-ramp-51",
+    fingerprint: "browserExtension::browser-ramp-51::ramp::design-systems-designer",
+    lastSourceSyncAt: "2026-07-11T08:50:00+05:30"
   },
   {
     id: "opp-cano",
@@ -78,7 +94,11 @@ export const opportunities: Opportunity[] = [
     matchScore: 92,
     contactName: "Nora Patel",
     contactChannel: "Email",
-    notes: "Strong culture fit. Needs relocation policy check."
+    notes: "Strong culture fit. Needs relocation policy check.",
+    sourceAccountId: "acct-indeed-demo",
+    sourceJobId: "indeed-9918",
+    fingerprint: "indeed::indeed-9918::canva::product-design-lead",
+    lastSourceSyncAt: "2026-07-11T08:28:00+05:30"
   }
 ];
 
@@ -171,28 +191,49 @@ export const syncSources: SyncSource[] = [
     label: "Naukri",
     connected: true,
     lastSyncedAt: "2026-07-11T08:35:00+05:30",
-    importedCount: 7
+    importedCount: 7,
+    method: "email_fallback",
+    status: "connected",
+    description: "Email fallback sync until a stable API account is available."
   },
   {
     id: "indeed",
     label: "Indeed",
     connected: true,
     lastSyncedAt: "2026-07-11T08:28:00+05:30",
-    importedCount: 11
+    importedCount: 11,
+    method: "official_api",
+    status: "connected",
+    description: "Imported through a saved account connection."
+  },
+  {
+    id: "shine",
+    label: "Shine",
+    connected: false,
+    importedCount: 0,
+    method: "email_fallback",
+    status: "not_connected",
+    description: "Ready to connect through email fallback sync."
   },
   {
     id: "browserExtension",
     label: "Browser extension",
     connected: true,
     lastSyncedAt: "2026-07-11T08:50:00+05:30",
-    importedCount: 9
+    importedCount: 9,
+    method: "manual_import",
+    status: "connected",
+    description: "Captures application confirmation pages from the browser."
   },
   {
     id: "emailParsing",
     label: "Email parsing",
     connected: true,
     lastSyncedAt: "2026-07-11T08:47:00+05:30",
-    importedCount: 5
+    importedCount: 5,
+    method: "email_fallback",
+    status: "connected",
+    description: "Parses recruiter and application emails into the sync pipeline."
   }
 ];
 
@@ -211,6 +252,87 @@ export const syncRuns: SyncRun[] = [
     startedAt: "2026-07-11T08:47:00+05:30",
     status: "normalizing",
     importedCount: 1,
-    mappedFields: ["company", "role", "followUpDueAt", "contact"]
+    mappedFields: ["company", "role", "followUpDueAt", "contact"],
+    updatedCount: 1,
+    skippedCount: 0
+  }
+];
+
+export const connectedAccounts: ConnectedAccount[] = [
+  {
+    id: "acct-linkedin-demo",
+    userId: "demo-user",
+    provider: "linkedin",
+    label: "LinkedIn",
+    method: "official_api",
+    status: "connected",
+    externalAccountId: "linkedin-user-demo",
+    scopes: ["r_emailaddress", "r_liteprofile"],
+    importedCount: 16,
+    lastSyncedAt: "2026-07-11T08:42:00+05:30",
+    syncState: "Healthy",
+    notes: "Official account connection ready for scheduled sync."
+  },
+  {
+    id: "acct-naukri-demo",
+    userId: "demo-user",
+    provider: "naukri",
+    label: "Naukri",
+    method: "email_fallback",
+    status: "connected",
+    externalAccountId: "naukri-mailbox-demo",
+    scopes: ["mail.read"],
+    importedCount: 7,
+    lastSyncedAt: "2026-07-11T08:35:00+05:30",
+    syncState: "Email fallback active",
+    notes: "Uses email parsing until direct portal access is available."
+  },
+  {
+    id: "acct-indeed-demo",
+    userId: "demo-user",
+    provider: "indeed",
+    label: "Indeed",
+    method: "official_api",
+    status: "connected",
+    externalAccountId: "indeed-user-demo",
+    scopes: ["applications.read"],
+    importedCount: 11,
+    lastSyncedAt: "2026-07-11T08:28:00+05:30",
+    syncState: "Healthy"
+  },
+  {
+    id: "acct-shine-demo",
+    userId: "demo-user",
+    provider: "shine",
+    label: "Shine",
+    method: "email_fallback",
+    status: "not_connected",
+    scopes: [],
+    importedCount: 0,
+    syncState: "Awaiting connection",
+    notes: "Set up mailbox parsing to bring Shine updates into the unified database."
+  }
+];
+
+export const sourceEvents: SourceEvent[] = [
+  {
+    id: "event-linkedin-1",
+    userId: "demo-user",
+    provider: "linkedin",
+    eventType: "application_imported",
+    opportunityId: "opp-figma",
+    fingerprint: "linkedin::li-23991::figma::senior-product-designer",
+    payload: { stage: "interviewing", company: "Figma", role: "Senior Product Designer" },
+    createdAt: "2026-07-11T08:42:00+05:30"
+  },
+  {
+    id: "event-email-1",
+    userId: "demo-user",
+    provider: "emailParsing",
+    eventType: "status_update",
+    opportunityId: "opp-microsoft",
+    fingerprint: "emailParsing::mail-microsoft-thread-1::microsoft::product-designer-ii",
+    payload: { stage: "recruiter", contact: "Anika Rao" },
+    createdAt: "2026-07-11T08:47:00+05:30"
   }
 ];

@@ -16,7 +16,12 @@ function fromRow(row: any): Opportunity {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     matchScore: row.match_score ?? 0,
-    notes: row.notes ?? ""
+    notes: row.notes ?? "",
+    sourceAccountId: row.source_account_id ?? undefined,
+    sourceJobId: row.source_job_id ?? undefined,
+    fingerprint: row.fingerprint ?? undefined,
+    lastSourceSyncAt: row.last_source_sync_at ?? undefined,
+    attachments: row.attachments ?? []
   };
 }
 
@@ -55,9 +60,14 @@ export async function seedUserOpportunities(userId: string, opportunities: Oppor
     next_action: opportunity.nextAction,
     follow_up_due_at: opportunity.followUpDueAt,
     match_score: opportunity.matchScore,
-    notes: opportunity.notes
+    notes: opportunity.notes,
+    source_account_id: opportunity.sourceAccountId,
+    source_job_id: opportunity.sourceJobId,
+    fingerprint: opportunity.fingerprint,
+    last_source_sync_at: opportunity.lastSourceSyncAt,
+    attachments: opportunity.attachments ?? []
   }));
 
-  await supabase.from("opportunities").insert(rows);
+  await supabase.from("opportunities").upsert(rows, { onConflict: "user_id,fingerprint" });
   await logActivity(userId, "seed_opportunities", { count: rows.length });
 }

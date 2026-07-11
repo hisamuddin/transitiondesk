@@ -17,6 +17,16 @@ const stageLabels: Record<Opportunity["stage"], string> = {
   closed: "Closed"
 };
 
+const sourceLabels: Record<Opportunity["source"], string> = {
+  linkedin: "LinkedIn",
+  naukri: "Naukri",
+  indeed: "Indeed",
+  shine: "Shine",
+  browserExtension: "Browser",
+  emailParsing: "Email",
+  manual: "Manual"
+};
+
 export function OpportunityCard({ opportunity, onPress }: OpportunityCardProps) {
   return (
     <Pressable style={styles.card} onPress={onPress}>
@@ -26,6 +36,7 @@ export function OpportunityCard({ opportunity, onPress }: OpportunityCardProps) 
       <View style={styles.copy}>
         <Text style={styles.company}>{opportunity.company}</Text>
         <Text style={styles.role}>{opportunity.role}</Text>
+        <Text style={styles.source}>{sourceLabels[opportunity.source]}</Text>
         <Text style={styles.action} numberOfLines={1}>{opportunity.nextAction}</Text>
       </View>
       <View style={styles.pill}>
@@ -76,6 +87,11 @@ const styles = StyleSheet.create({
   action: {
     color: colors.muted,
     fontSize: 12
+  },
+  source: {
+    color: colors.blue,
+    fontSize: 11,
+    fontWeight: "800"
   },
   pill: {
     backgroundColor: colors.greenSoft,

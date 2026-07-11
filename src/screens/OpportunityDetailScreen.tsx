@@ -1,20 +1,48 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AppCard } from "../components/AppCard";
+import { useAuthUser } from "../components/AuthGate";
 import { Screen } from "../components/Screen";
 import { opportunities, resumes } from "../data/seed";
 import { RootStackParamList } from "../navigation/types";
 import { draftFollowUp, suggestResumeImprovements } from "../services/ai/careerAssistant";
+import { loadUserOpportunities } from "../services/supabase/opportunities";
+import { loadSourceEvents } from "../services/supabase/sync";
 import { colors } from "../theme/colors";
+import { Opportunity, SourceEvent } from "../types/career";
 
 type Props = NativeStackScreenProps<RootStackParamList, "OpportunityDetail">;
 
 export function OpportunityDetailScreen({ route }: Props) {
-  const opportunity = opportunities.find((item) => item.id === route.params.opportunityId) ?? opportunities[0];
+  const user = useAuthUser();
+  const [workspaceOpportunity, setWorkspaceOpportunity] = useState<Opportunity | null>(
+    opportunities.find((item) => item.id === route.params.opportunityId) ?? opportunities[0]
+  );
+  const [events, setEvents] = useState<SourceEvent[]>([]);
+  const opportunity = workspaceOpportunity ?? opportunities[0];
   const resume = resumes.find((item) => item.id === opportunity.resumeVersionId) ?? resumes[0];
   const [assistantText, setAssistantText] = useState("");
+
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+
+    loadUserOpportunities(user.id)
+      .then((nextOpportunities) => {
+        const match = nextOpportunities?.find((item) => item.id === route.params.opportunityId);
+        if (match) {
+          setWorkspaceOpportunity(match);
+        }
+      })
+      .catch(() => undefined);
+
+    loadSourceEvents(user.id, route.params.opportunityId)
+      .then((nextEvents) => setEvents(nextEvents))
+      .catch(() => setEvents([]));
+  }, [route.params.opportunityId, user?.id]);
 
   async function handleResumeMatch() {
     const suggestion = await suggestResumeImprovements(opportunity, resume);
@@ -38,6 +66,9 @@ export function OpportunityDetailScreen({ route }: Props) {
         <Text style={styles.cardLabel}>Next action</Text>
         <Text style={styles.action}>{opportunity.nextAction}</Text>
         <Text style={styles.meta}>Source: {opportunity.source} - Match: {opportunity.matchScore}%</Text>
+        {opportunity.lastSourceSyncAt ? (
+          <Text style={styles.meta}>Last sync: {new Date(opportunity.lastSourceSyncAt).toLocaleString()}</Text>
+        ) : null}
       </AppCard>
 
       <AppCard>
@@ -53,6 +84,17 @@ export function OpportunityDetailScreen({ route }: Props) {
         <Text style={styles.sectionTitle}>Contact</Text>
         <Text style={styles.rowTitle}>{opportunity.contactName ?? "No contact yet"}</Text>
         <Text style={styles.meta}>{opportunity.contactChannel ?? "Add recruiter, referrer, or hiring manager details."}</Text>
+      </AppCard>
+
+      <AppCard>
+        <Text style={styles.sectionTitle}>Sync provenance</Text>
+        <Text style={styles.meta}>Fingerprint: {opportunity.fingerprint ?? "Pending sync fingerprint"}</Text>
+        <Text style={styles.meta}>Source account: {opportunity.sourceAccountId ?? "Manual or unlinked source"}</Text>
+        {events.slice(0, 2).map((event) => (
+          <Text key={event.id} style={styles.meta}>
+            {event.provider}: {event.eventType} at {new Date(event.createdAt).toLocaleString()}
+          </Text>
+        ))}
       </AppCard>
 
       <View style={styles.actions}>
