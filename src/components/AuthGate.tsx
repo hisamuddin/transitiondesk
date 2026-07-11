@@ -27,10 +27,33 @@ export function AuthGate({ children }: AuthGateProps) {
       return;
     }
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session?.user) {
-        syncProfile(data.session.user.id, data.session.user.email ?? "", data.session.user.user_metadata);
+    async function hydrateSession() {
+      if (!supabase) {
+        setLoading(false);
+        return;
       }
+
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token");
+
+      if (accessToken && refreshToken) {
+        await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        });
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+      }
+
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.user) {
+        await syncProfile(data.session.user.id, data.session.user.email ?? "", data.session.user.user_metadata);
+      }
+      setLoading(false);
+    }
+
+    hydrateSession().catch((sessionError) => {
+      setError(sessionError instanceof Error ? sessionError.message : "Unable to complete Google sign in.");
       setLoading(false);
     });
 
