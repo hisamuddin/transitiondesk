@@ -15,10 +15,12 @@
   "dependencies": {
     "@expo/metro-runtime": "~3.2.3",
     "@expo/vector-icons": "14.0.4",
+    "@opentelemetry/api": "^1.9.1",
     "@react-native-async-storage/async-storage": "1.23.1",
     "@react-navigation/bottom-tabs": "^6.6.1",
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/native-stack": "^6.11.0",
+    "@supabase/supabase-js": "^2.109.0",
     "expo": "^51.0.0",
     "expo-calendar": "^13.0.5",
     "expo-document-picker": "^12.0.2",

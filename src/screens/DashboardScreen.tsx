@@ -1,24 +1,32 @@
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
+import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { AppCard } from "../components/AppCard";
+import { useAuthUser } from "../components/AuthGate";
 import { MetricCard } from "../components/MetricCard";
 import { OpportunityCard } from "../components/OpportunityCard";
 import { Screen } from "../components/Screen";
 import { followUps, interviews, opportunities } from "../data/seed";
 import { RootStackParamList } from "../navigation/types";
+import { logActivity } from "../services/supabase/activity";
 import { colors } from "../theme/colors";
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
 export function DashboardScreen() {
   const navigation = useNavigation<Navigation>();
+  const user = useAuthUser();
   const active = opportunities.filter((opportunity) => opportunity.stage !== "closed");
   const followUpsDue = followUps.filter((task) => !task.completed);
   const attention = [...active]
     .sort((left, right) => (left.followUpDueAt ?? "9999").localeCompare(right.followUpDueAt ?? "9999"))
     .slice(0, 3);
+
+  useEffect(() => {
+    logActivity(user?.id, "view_dashboard", { activeCount: active.length, followUpsDue: followUpsDue.length });
+  }, [user?.id]);
 
   return (
     <Screen>
@@ -45,7 +53,10 @@ export function DashboardScreen() {
         <OpportunityCard
           key={opportunity.id}
           opportunity={opportunity}
-          onPress={() => navigation.navigate("OpportunityDetail", { opportunityId: opportunity.id })}
+          onPress={() => {
+            logActivity(user?.id, "open_opportunity", { company: opportunity.company }, "opportunity", opportunity.id);
+            navigation.navigate("OpportunityDetail", { opportunityId: opportunity.id });
+          }}
         />
       ))}
     </Screen>

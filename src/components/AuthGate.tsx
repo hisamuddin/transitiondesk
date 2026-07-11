@@ -1,7 +1,8 @@
-import { ReactNode, useEffect, useRef, useState } from "react";
-import { Platform, StyleSheet, Text, View } from "react-native";
+import { ReactNode, createContext, useContext, useEffect, useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
-import { getGoogleClientId, renderGoogleButton } from "../services/auth/googleWebAuth";
+import { logActivity } from "../services/supabase/activity";
+import { adminEmails, isSupabaseConfigured, supabase } from "../services/supabase/client";
 import { colors } from "../theme/colors";
 import { GoogleUser } from "../types/auth";
 
@@ -9,42 +10,113 @@ type AuthGateProps = {
   children: ReactNode;
 };
 
+const AuthContext = createContext<GoogleUser | null>(null);
+
+export function useAuthUser() {
+  return useContext(AuthContext);
+}
+
 export function AuthGate({ children }: AuthGateProps) {
   const [user, setUser] = useState<GoogleUser | null>(null);
   const [error, setError] = useState("");
-  const buttonContainer = useRef<any>(null);
-  const clientId = getGoogleClientId();
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (Platform.OS !== "web" || !buttonContainer.current || !clientId || user) {
+    if (Platform.OS !== "web" || !supabase) {
+      setLoading(false);
       return;
     }
 
-    renderGoogleButton(buttonContainer.current as HTMLElement, clientId, setUser).catch((caughtError) => {
-      setError(caughtError instanceof Error ? caughtError.message : "Google sign-in failed.");
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session?.user) {
+        syncProfile(data.session.user.id, data.session.user.email ?? "", data.session.user.user_metadata);
+      }
+      setLoading(false);
     });
-  }, [clientId, user]);
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        syncProfile(session.user.id, session.user.email ?? "", session.user.user_metadata);
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  async function syncProfile(id: string, email: string, metadata: Record<string, any> = {}) {
+    const normalizedEmail = email.toLowerCase();
+    const nextUser = {
+      email,
+      id,
+      isAdmin: adminEmails.includes(normalizedEmail),
+      name: metadata.full_name ?? metadata.name ?? email,
+      picture: metadata.avatar_url ?? metadata.picture
+    };
+
+    setUser(nextUser);
+
+    if (supabase) {
+      await supabase.from("profiles").upsert({
+        id,
+        email,
+        name: nextUser.name,
+        avatar_url: nextUser.picture,
+        role: nextUser.isAdmin ? "admin" : "user",
+        last_login_at: new Date().toISOString()
+      });
+      await logActivity(id, "login", { email, provider: "google" }, "profile", id);
+    }
+  }
+
+  async function signInWithGoogle() {
+    if (!supabase) {
+      return;
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
+
+    if (signInError) {
+      setError(signInError.message);
+    }
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.page}>
+        <Text style={styles.copy}>Loading secure workspace...</Text>
+      </View>
+    );
+  }
 
   if (user || Platform.OS !== "web") {
-    return <>{children}</>;
+    return <AuthContext.Provider value={user}>{children}</AuthContext.Provider>;
   }
 
   return (
     <View style={styles.page}>
       <View style={styles.panel}>
-        <Text style={styles.eyebrow}>Google OAuth required</Text>
-        <Text style={styles.title}>Career Transition OS</Text>
+        <Text style={styles.eyebrow}>Google login required</Text>
+        <Text style={styles.title}>Transition Desk</Text>
         <Text style={styles.copy}>
-          Sign in with Google to open your private job transition workspace.
+          Sign in with Google to open your private career transition workspace.
         </Text>
 
-        {clientId ? (
-          <View ref={buttonContainer} style={styles.googleButton} />
+        {isSupabaseConfigured ? (
+          <Pressable style={styles.googleButton} onPress={signInWithGoogle}>
+            <Text style={styles.googleButtonText}>Continue with Google</Text>
+          </Pressable>
         ) : (
           <View style={styles.setupBox}>
-            <Text style={styles.setupTitle}>Google Client ID needed</Text>
+            <Text style={styles.setupTitle}>Supabase setup needed</Text>
             <Text style={styles.setupText}>
-              Set EXPO_PUBLIC_GOOGLE_CLIENT_ID in the hosted environment with a Google OAuth Web Client ID.
+              Set EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY, and EXPO_PUBLIC_ADMIN_EMAILS in hosting.
             </Text>
           </View>
         )}
@@ -94,7 +166,16 @@ const styles = StyleSheet.create({
   },
   googleButton: {
     alignItems: "center",
-    marginTop: 24
+    backgroundColor: colors.blue,
+    borderRadius: 8,
+    justifyContent: "center",
+    marginTop: 24,
+    minHeight: 48
+  },
+  googleButtonText: {
+    color: colors.surface,
+    fontSize: 15,
+    fontWeight: "900"
   },
   setupBox: {
     backgroundColor: colors.amberSoft,

@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import { colors } from "../theme/colors";
 import { DashboardScreen } from "../screens/DashboardScreen";
+import { AdminScreen } from "../screens/AdminScreen";
 import { DocumentsScreen } from "../screens/DocumentsScreen";
 import { InterviewsScreen } from "../screens/InterviewsScreen";
 import { OpportunityDetailScreen } from "../screens/OpportunityDetailScreen";
@@ -34,7 +35,8 @@ function MainTabs() {
             Sync: "sync-outline",
             Pipeline: "briefcase-outline",
             Documents: "document-text-outline",
-            Interviews: "calendar-outline"
+            Interviews: "calendar-outline",
+            Admin: "analytics-outline"
           }[route.name] as keyof typeof Ionicons.glyphMap;
 
           return <Ionicons name={iconName} color={color} size={size} />;
@@ -46,6 +48,7 @@ function MainTabs() {
       <Tabs.Screen name="Pipeline" component={PipelineScreen} />
       <Tabs.Screen name="Documents" component={DocumentsScreen} />
       <Tabs.Screen name="Interviews" component={InterviewsScreen} />
+      <Tabs.Screen name="Admin" component={AdminScreen} />
     </Tabs.Navigator>
   );
 }

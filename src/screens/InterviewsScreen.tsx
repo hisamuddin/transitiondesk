@@ -1,9 +1,11 @@
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AppCard } from "../components/AppCard";
+import { useAuthUser } from "../components/AuthGate";
 import { Screen } from "../components/Screen";
 import { interviews } from "../data/seed";
 import { addInterviewToCalendar } from "../services/calendar/calendarService";
+import { logActivity } from "../services/supabase/activity";
 import { colors } from "../theme/colors";
 
 function formatInterviewTime(value: string) {
@@ -16,6 +18,7 @@ function formatInterviewTime(value: string) {
 }
 
 export function InterviewsScreen() {
+  const user = useAuthUser();
   async function handleAddToCalendar(interviewId: string) {
     const interview = interviews.find((item) => item.id === interviewId);
     if (!interview) {
@@ -24,6 +27,7 @@ export function InterviewsScreen() {
 
     try {
       await addInterviewToCalendar(interview);
+      await logActivity(user?.id, "add_interview_to_calendar", { company: interview.company }, "interview", interview.id);
       Alert.alert("Added", `${interview.company} interview was added to your calendar.`);
     } catch (error) {
       Alert.alert("Calendar unavailable", error instanceof Error ? error.message : "Could not add event.");

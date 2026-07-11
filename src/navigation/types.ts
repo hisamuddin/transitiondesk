@@ -11,4 +11,5 @@ export type MainTabParamList = {
   Pipeline: undefined;
   Documents: undefined;
   Interviews: undefined;
+  Admin: undefined;
 };

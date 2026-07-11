@@ -76,11 +76,16 @@ function responseFor(pathname, env) {
 
   if (asset.contentType.startsWith("text/html")) {
     const html = new TextDecoder().decode(body);
-    const clientId = env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "";
+    const config = {
+      adminEmails: env.EXPO_PUBLIC_ADMIN_EMAILS || "",
+      googleClientId: env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "",
+      supabaseAnonKey: env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "",
+      supabaseUrl: env.EXPO_PUBLIC_SUPABASE_URL || ""
+    };
     body = new TextEncoder().encode(
       html.replace(
         "</head>",
-        \`<script>window.__GOOGLE_CLIENT_ID__=\${JSON.stringify(clientId)};</script></head>\`
+        \`<script>window.__APP_CONFIG__=\${JSON.stringify(config)};window.__GOOGLE_CLIENT_ID__=\${JSON.stringify(config.googleClientId)};</script></head>\`
       )
     );
   }

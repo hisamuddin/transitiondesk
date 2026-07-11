@@ -2,25 +2,30 @@ import { useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AppCard } from "../components/AppCard";
+import { useAuthUser } from "../components/AuthGate";
 import { Screen } from "../components/Screen";
 import { opportunities, resumes } from "../data/seed";
 import { draftCoverLetter } from "../services/ai/careerAssistant";
 import { pickCareerDocument } from "../services/documents/documentStorage";
+import { logActivity } from "../services/supabase/activity";
 import { colors } from "../theme/colors";
 
 export function DocumentsScreen() {
+  const user = useAuthUser();
   const [assistantText, setAssistantText] = useState("");
   const topOpportunity = opportunities[0];
 
   async function handleImportDocument() {
     const document = await pickCareerDocument();
     if (document) {
+      logActivity(user?.id, "import_document", { name: document.name, mimeType: document.mimeType });
       Alert.alert("Document saved", document.name);
     }
   }
 
   async function handleDraftCoverLetter() {
     const draft = await draftCoverLetter(topOpportunity);
+    await logActivity(user?.id, "draft_cover_letter", { company: topOpportunity.company }, "opportunity", topOpportunity.id);
     setAssistantText(draft);
   }
 

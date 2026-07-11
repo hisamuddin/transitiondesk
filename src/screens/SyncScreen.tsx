@@ -1,16 +1,24 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useEffect } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { AppCard } from "../components/AppCard";
+import { useAuthUser } from "../components/AuthGate";
 import { MetricCard } from "../components/MetricCard";
 import { Screen } from "../components/Screen";
 import { listRecentSyncRuns, listSyncSources, summarizeSyncHealth } from "../services/sync/syncEngine";
+import { logActivity } from "../services/supabase/activity";
 import { colors } from "../theme/colors";
 
 export function SyncScreen() {
+  const user = useAuthUser();
   const sources = listSyncSources();
   const runs = listRecentSyncRuns();
   const health = summarizeSyncHealth();
+
+  useEffect(() => {
+    logActivity(user?.id, "view_sync", { activePortalCount: health.activePortalCount });
+  }, [user?.id]);
 
   return (
     <Screen>
