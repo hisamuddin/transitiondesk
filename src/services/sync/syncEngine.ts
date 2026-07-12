@@ -20,6 +20,7 @@ export type RawJobApplication = {
   status?: string;
   city?: string;
   contact?: string;
+  contactEmail?: string;
   notes?: string;
   roleResponsibilities?: string[];
   interviewStartsAt?: string;
@@ -30,6 +31,7 @@ export type RawJobApplication = {
   sourceLinks?: string[];
   jobPostingUrl?: string;
   applicationUrl?: string;
+  dataQualityNotes?: string[];
   extractionConfidence?: number;
   attachments?: string[];
   receivedAt?: string;
@@ -216,6 +218,7 @@ export function normalizeApplication(raw: RawJobApplication, sourceAccountId?: s
     matchScore: stage === "offer" ? 92 : stage === "interviewing" ? 86 : 78,
     contactName: raw.contact,
     contactChannel: raw.contact ? providerLabels[raw.source] : undefined,
+    contactEmail: raw.contactEmail,
     notes: raw.notes ?? "Imported through sync engine after field normalization.",
     roleResponsibilities: raw.roleResponsibilities,
     interviewStartsAt: raw.interviewStartsAt,
@@ -223,10 +226,11 @@ export function normalizeApplication(raw: RawJobApplication, sourceAccountId?: s
       sourceSubject: raw.sourceSubject,
       sourceSnippet: raw.sourceSnippet,
       sourceReceivedAt: raw.sourceReceivedAt,
-      sourceLinks: raw.sourceLinks,
-      jobPostingUrl: raw.jobPostingUrl,
-      applicationUrl: raw.applicationUrl,
-      extractionConfidence: raw.extractionConfidence,
+    sourceLinks: raw.sourceLinks,
+    jobPostingUrl: raw.jobPostingUrl,
+    applicationUrl: raw.applicationUrl,
+    dataQualityNotes: raw.dataQualityNotes,
+    extractionConfidence: raw.extractionConfidence,
     sourceAccountId,
     sourceJobId: raw.sourceJobId,
     fingerprint: buildFingerprint(raw),

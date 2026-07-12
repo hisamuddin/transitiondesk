@@ -1,23 +1,69 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AppCard } from "../components/AppCard";
 import { useAuthUser } from "../components/AuthGate";
 import { Screen } from "../components/Screen";
-import { opportunities, resumes } from "../data/seed";
+import { opportunities as demoOpportunities } from "../data/seed";
 import { draftCoverLetter } from "../services/ai/careerAssistant";
 import { pickCareerDocument } from "../services/documents/documentStorage";
 import { logActivity } from "../services/supabase/activity";
+import { loadUserOpportunitiesQuietly } from "../services/supabase/opportunities";
 import { colors } from "../theme/colors";
+import { Opportunity } from "../types/career";
+
+type ImportedDocument = {
+  name: string;
+  mimeType?: string;
+  uri: string;
+};
 
 export function DocumentsScreen() {
   const user = useAuthUser();
+  const isDemo = user?.authProvider === "demo";
   const [assistantText, setAssistantText] = useState("");
-  const topOpportunity = opportunities[0];
+  const [opportunities, setOpportunities] = useState<Opportunity[]>(isDemo ? demoOpportunities : []);
+  const [importedDocuments, setImportedDocuments] = useState<ImportedDocument[]>([]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadDocumentsContext() {
+      if (!user?.id || isDemo) {
+        setOpportunities(isDemo ? demoOpportunities : []);
+        return;
+      }
+
+      try {
+        const records = await loadUserOpportunitiesQuietly(user.id);
+        if (active) {
+          setOpportunities(records ?? []);
+        }
+      } catch {
+        if (active) {
+          setOpportunities([]);
+        }
+      }
+    }
+
+    loadDocumentsContext();
+    return () => {
+      active = false;
+    };
+  }, [isDemo, user?.id]);
+
+  const documentSummary = useMemo(() => buildDocumentSummary(opportunities, importedDocuments), [importedDocuments, opportunities]);
+  const topOpportunity = documentSummary.bestOpportunity ?? opportunities[0] ?? demoOpportunities[0];
 
   async function handleImportDocument() {
     const document = await pickCareerDocument();
     if (document) {
+      const importedDocument = {
+        name: document.name,
+        mimeType: document.mimeType,
+        uri: document.uri
+      };
+      setImportedDocuments((current) => [importedDocument, ...current]);
       logActivity(user?.id, "import_document", { name: document.name, mimeType: document.mimeType });
       Alert.alert("Document saved", document.name);
     }
@@ -32,14 +78,23 @@ export function DocumentsScreen() {
   return (
     <Screen>
       <View>
-        <Text style={styles.eyebrow}>File storage and AI</Text>
+        <Text style={styles.eyebrow}>Candidate documents</Text>
         <Text style={styles.title}>Document studio</Text>
+        <Text style={styles.subhead}>
+          Resume, JD, and attachment evidence from your synced applications.
+        </Text>
       </View>
 
-      <AppCard tone="green">
-        <Text style={styles.cardLabel}>Best match</Text>
-        <Text style={styles.bigScore}>{resumes[0].matchScore}%</Text>
-        <Text style={styles.meta}>Resume versions are linked back to the opportunities where each file was sent.</Text>
+      <AppCard tone={documentSummary.readinessScore >= 70 ? "green" : "amber"}>
+        <Text style={styles.cardLabel}>Application packet readiness</Text>
+        <Text style={[styles.bigScore, documentSummary.readinessScore >= 70 ? styles.greenText : styles.amberText]}>
+          {documentSummary.readinessScore}%
+        </Text>
+        <Text style={styles.meta}>
+          {documentSummary.totalAttachments > 0
+            ? `${documentSummary.totalAttachments} email attachment${documentSummary.totalAttachments === 1 ? "" : "s"} linked to synced opportunities.`
+            : "No resume or job description attachments were found in synced Gmail messages yet."}
+        </Text>
       </AppCard>
 
       <View style={styles.actions}>
@@ -51,18 +106,64 @@ export function DocumentsScreen() {
         </Pressable>
       </View>
 
-      {resumes.map((resume) => (
-        <AppCard key={resume.id}>
-          <View style={styles.row}>
-            <View style={styles.copy}>
-              <Text style={styles.rowTitle}>{resume.title}</Text>
-              <Text style={styles.meta}>{resume.focus}</Text>
+      <View style={styles.metrics}>
+        <Metric label="Synced roles" value={String(opportunities.length)} />
+        <Metric label="Attachments" value={String(documentSummary.totalAttachments)} />
+        <Metric label="Job links" value={String(documentSummary.linkedOpportunities)} />
+        <Metric label="Needs docs" value={String(documentSummary.missingDocumentCount)} />
+      </View>
+
+      <AppCard>
+        <Text style={styles.rowTitle}>Best candidate focus</Text>
+        <Text style={styles.meta}>
+          {documentSummary.bestOpportunity
+            ? `${documentSummary.bestOpportunity.role} at ${documentSummary.bestOpportunity.company}`
+            : "Sync Gmail to identify the role that should drive resume tailoring."}
+        </Text>
+        <View style={styles.detailList}>
+          <Detail label="Contact" value={formatContact(documentSummary.bestOpportunity)} />
+          <Detail label="Evidence" value={formatEvidence(documentSummary.bestOpportunity)} />
+          <Detail label="Next action" value={documentSummary.bestOpportunity?.nextAction ?? "Reconnect Gmail, sync inbox, then attach the current resume."} />
+        </View>
+      </AppCard>
+
+      <AppCard>
+        <Text style={styles.rowTitle}>Email attachments found</Text>
+        {documentSummary.attachmentRows.length > 0 ? (
+          documentSummary.attachmentRows.map((row) => (
+            <View key={`${row.opportunityId}-${row.name}`} style={styles.attachmentRow}>
+              <View style={styles.copy}>
+                <Text style={styles.attachmentName}>{row.name}</Text>
+                <Text style={styles.meta}>{row.company} - {row.role}</Text>
+              </View>
+              <Text style={styles.badge}>Email</Text>
             </View>
-            <Text style={styles.score}>{resume.matchScore}%</Text>
-          </View>
-          <Text style={styles.used}>Used for {resume.usedForOpportunityIds.length} opportunities</Text>
+          ))
+        ) : (
+          <Text style={styles.meta}>
+            No attachments are stored for the synced opportunities. After reconnecting Gmail, the next inbox sync will read message parts and list resume, JD, and PDF filenames here when present.
+          </Text>
+        )}
+      </AppCard>
+
+      {importedDocuments.length > 0 ? (
+        <AppCard tone="blue">
+          <Text style={styles.rowTitle}>Imported by candidate</Text>
+          {importedDocuments.map((document) => (
+            <View key={document.uri} style={styles.attachmentRow}>
+              <Text style={styles.attachmentName}>{document.name}</Text>
+              <Text style={styles.badge}>Local</Text>
+            </View>
+          ))}
         </AppCard>
-      ))}
+      ) : null}
+
+      <AppCard tone={documentSummary.actions.length > 0 ? "amber" : "green"}>
+        <Text style={styles.rowTitle}>Recommended next actions</Text>
+        {documentSummary.actions.map((action) => (
+          <Text key={action} style={styles.actionItem}>{action}</Text>
+        ))}
+      </AppCard>
 
       {assistantText ? (
         <AppCard tone="blue">
@@ -72,6 +173,97 @@ export function DocumentsScreen() {
       ) : null}
     </Screen>
   );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <AppCard style={styles.metricCard}>
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+    </AppCard>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.detail}>
+      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={styles.detailValue}>{value}</Text>
+    </View>
+  );
+}
+
+function buildDocumentSummary(opportunities: Opportunity[], importedDocuments: ImportedDocument[]) {
+  const attachmentRows = opportunities.flatMap((opportunity) =>
+    (opportunity.attachments ?? []).map((name) => ({
+      company: opportunity.company,
+      name,
+      opportunityId: opportunity.id,
+      role: opportunity.role
+    }))
+  );
+  const linkedOpportunities = opportunities.filter((opportunity) =>
+    Boolean(opportunity.jobPostingUrl || opportunity.applicationUrl || (opportunity.sourceLinks?.length ?? 0) > 0)
+  ).length;
+  const opportunitiesWithDocuments = opportunities.filter((opportunity) =>
+    (opportunity.attachments?.length ?? 0) > 0 || opportunity.resumeVersionId || opportunity.coverLetterId
+  ).length;
+  const missingDocumentCount = Math.max(opportunities.length - opportunitiesWithDocuments, 0);
+  const bestOpportunity = [...opportunities].sort((left, right) => scoreOpportunity(right) - scoreOpportunity(left))[0];
+  const readinessScore = opportunities.length === 0
+    ? importedDocuments.length > 0 ? 35 : 0
+    : Math.min(100, Math.round(((opportunitiesWithDocuments + linkedOpportunities + importedDocuments.length) / (opportunities.length * 2 + 1)) * 100));
+
+  const actions = [
+    opportunities.length === 0 ? "Sync Gmail inbox to create real opportunity records." : "",
+    attachmentRows.length === 0 ? "Reconnect Gmail and sync again to capture resume, JD, or PDF attachment filenames." : "",
+    missingDocumentCount > 0 ? `Attach or import the resume used for ${missingDocumentCount} synced role${missingDocumentCount === 1 ? "" : "s"}.` : "",
+    linkedOpportunities < opportunities.length ? "Open source job links and confirm role title, recruiter contact, and responsibilities." : "",
+    bestOpportunity?.dataQualityNotes?.length ? `Review data quality for ${bestOpportunity.company}: ${bestOpportunity.dataQualityNotes[0]}` : ""
+  ].filter(Boolean);
+
+  return {
+    actions: actions.length > 0 ? actions : ["Documents look connected to the current application set."],
+    attachmentRows,
+    bestOpportunity,
+    linkedOpportunities,
+    missingDocumentCount,
+    readinessScore,
+    totalAttachments: attachmentRows.length
+  };
+}
+
+function scoreOpportunity(opportunity: Opportunity) {
+  return opportunity.matchScore
+    + ((opportunity.attachments?.length ?? 0) * 10)
+    + (opportunity.jobPostingUrl || opportunity.applicationUrl ? 8 : 0)
+    + (opportunity.contactEmail || opportunity.contactName ? 5 : 0)
+    - (needsRoleReview(opportunity.role) ? 12 : 0);
+}
+
+function needsRoleReview(role: string) {
+  return /application update|role mentioned|imported application|not synced/i.test(role);
+}
+
+function formatContact(opportunity?: Opportunity) {
+  if (!opportunity) {
+    return "No contact synced yet";
+  }
+  return opportunity.contactEmail ?? opportunity.contactName ?? opportunity.contactChannel ?? "No recruiter contact found in email metadata yet";
+}
+
+function formatEvidence(opportunity?: Opportunity) {
+  if (!opportunity) {
+    return "No Gmail evidence available yet";
+  }
+  const pieces = [
+    opportunity.sourceSubject ? "email subject" : "",
+    opportunity.sourceReceivedAt ? "received date" : "",
+    opportunity.jobPostingUrl ? "job link" : "",
+    opportunity.applicationUrl ? "application link" : "",
+    (opportunity.attachments?.length ?? 0) > 0 ? "attachment" : ""
+  ].filter(Boolean);
+  return pieces.length > 0 ? pieces.join(", ") : "Only basic email metadata is available";
 }
 
 const styles = StyleSheet.create({
@@ -87,17 +279,28 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginTop: 4
   },
+  subhead: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 6
+  },
   cardLabel: {
-    color: colors.green,
+    color: colors.ink,
     fontSize: 13,
     fontWeight: "800"
   },
   bigScore: {
-    color: colors.green,
     fontSize: 46,
     fontWeight: "900",
     lineHeight: 52,
     marginTop: 6
+  },
+  greenText: {
+    color: colors.green
+  },
+  amberText: {
+    color: colors.amber
   },
   meta: {
     color: colors.muted,
@@ -114,8 +317,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.blue,
     borderRadius: 8,
     flex: 1,
-    minHeight: 46,
     justifyContent: "center",
+    minHeight: 46,
     paddingHorizontal: 12
   },
   buttonText: {
@@ -123,29 +326,84 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "900"
   },
-  row: {
-    alignItems: "center",
+  metrics: {
     flexDirection: "row",
-    gap: 12,
-    justifyContent: "space-between"
+    flexWrap: "wrap",
+    gap: 10
   },
-  copy: {
-    flex: 1
+  metricCard: {
+    flexBasis: 150,
+    flexGrow: 1
+  },
+  metricValue: {
+    color: colors.ink,
+    fontSize: 28,
+    fontWeight: "900"
+  },
+  metricLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 4,
+    textTransform: "uppercase"
   },
   rowTitle: {
     color: colors.ink,
     fontSize: 15,
     fontWeight: "800"
   },
-  score: {
-    color: colors.green,
-    fontSize: 18,
-    fontWeight: "900"
+  detailList: {
+    gap: 10,
+    marginTop: 12
   },
-  used: {
+  detail: {
+    gap: 3
+  },
+  detailLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase"
+  },
+  detailValue: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "700"
+  },
+  attachmentRow: {
+    alignItems: "center",
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+    marginTop: 12,
+    paddingTop: 12
+  },
+  copy: {
+    flex: 1
+  },
+  attachmentName: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "800"
+  },
+  badge: {
+    backgroundColor: colors.blueSoft,
+    borderRadius: 8,
     color: colors.blue,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "900",
+    overflow: "hidden",
+    paddingHorizontal: 10,
+    paddingVertical: 5
+  },
+  actionItem: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 20,
     marginTop: 10
   }
 });

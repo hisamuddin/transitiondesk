@@ -40,15 +40,8 @@ export function OpportunityCard({ opportunity, onPress }: OpportunityCardProps) 
   );
 
   return (
-    <Pressable
-      style={[styles.card, isPreviewVisible && styles.cardActive]}
-      onHoverIn={() => setPreviewVisible(true)}
-      onHoverOut={() => setPreviewVisible(false)}
-      onLongPress={() => setPreviewVisible((current) => !current)}
-      delayLongPress={250}
-      onPress={onPress}
-    >
-      <View style={styles.summaryRow}>
+    <View style={[styles.card, isPreviewVisible && styles.cardActive]}>
+      <Pressable style={styles.summaryRow} onPress={onPress}>
         <View style={styles.mark}>
           <Text style={styles.markText}>{opportunity.company.slice(0, 1)}</Text>
         </View>
@@ -61,6 +54,21 @@ export function OpportunityCard({ opportunity, onPress }: OpportunityCardProps) 
         <View style={styles.pill}>
           <Text style={styles.pillText}>{stageLabels[opportunity.stage]}</Text>
         </View>
+      </Pressable>
+
+      <View style={styles.cardActions}>
+        {hasPreviewDetails ? (
+          <Pressable style={styles.previewToggle} onPress={() => setPreviewVisible((current) => !current)}>
+            <Text style={styles.previewToggleText}>{isPreviewVisible ? "Hide details" : "Show details"}</Text>
+          </Pressable>
+        ) : (
+          <Text style={styles.noPreviewText}>More details after next Gmail sync</Text>
+        )}
+        {isPreviewVisible ? (
+          <Pressable style={styles.openButton} onPress={onPress}>
+            <Text style={styles.openButtonText}>Open</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       {hasPreviewDetails && isPreviewVisible ? (
@@ -102,7 +110,7 @@ export function OpportunityCard({ opportunity, onPress }: OpportunityCardProps) 
           ) : null}
         </View>
       ) : null}
-    </Pressable>
+    </View>
   );
 }
 
@@ -185,6 +193,41 @@ const styles = StyleSheet.create({
     color: colors.green,
     fontSize: 11,
     fontWeight: "800"
+  },
+  cardActions: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10
+  },
+  previewToggle: {
+    alignItems: "center",
+    backgroundColor: colors.blueSoft,
+    borderRadius: 8,
+    minHeight: 34,
+    paddingHorizontal: 12
+  },
+  previewToggleText: {
+    color: colors.blue,
+    fontSize: 12,
+    fontWeight: "900",
+    lineHeight: 34
+  },
+  noPreviewText: {
+    color: colors.muted,
+    fontSize: 12
+  },
+  openButton: {
+    alignItems: "center",
+    backgroundColor: colors.blue,
+    borderRadius: 8,
+    minHeight: 34,
+    paddingHorizontal: 14
+  },
+  openButtonText: {
+    color: colors.surface,
+    fontSize: 12,
+    fontWeight: "900",
+    lineHeight: 34
   },
   preview: {
     borderTopColor: colors.line,

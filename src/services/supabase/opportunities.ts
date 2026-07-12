@@ -18,6 +18,7 @@ function fromRow(row: any): Opportunity {
     matchScore: row.match_score ?? 0,
     contactName: row.contact_name ?? undefined,
     contactChannel: row.contact_channel ?? undefined,
+    contactEmail: row.contact_email ?? undefined,
     notes: row.notes ?? "",
     roleResponsibilities: row.role_responsibilities ?? [],
     interviewStartsAt: row.interview_starts_at ?? undefined,
@@ -28,6 +29,7 @@ function fromRow(row: any): Opportunity {
     sourceLinks: row.source_links ?? [],
     jobPostingUrl: row.job_posting_url ?? undefined,
     applicationUrl: row.application_url ?? undefined,
+    dataQualityNotes: row.data_quality_notes ?? [],
     extractionConfidence: row.extraction_confidence ?? undefined,
     sourceAccountId: row.source_account_id ?? undefined,
     sourceJobId: row.source_job_id ?? undefined,
@@ -56,6 +58,24 @@ export async function loadUserOpportunities(userId: string | undefined) {
   return (data ?? []).map(fromRow);
 }
 
+export async function loadUserOpportunitiesQuietly(userId: string | undefined) {
+  if (!supabase || !userId) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("opportunities")
+    .select("*")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).map(fromRow);
+}
+
 export async function seedUserOpportunities(userId: string, opportunities: Opportunity[]) {
   if (!supabase) {
     return;
@@ -74,6 +94,7 @@ export async function seedUserOpportunities(userId: string, opportunities: Oppor
     match_score: opportunity.matchScore,
     contact_name: opportunity.contactName,
     contact_channel: opportunity.contactChannel,
+    contact_email: opportunity.contactEmail,
     notes: opportunity.notes,
     role_responsibilities: opportunity.roleResponsibilities ?? [],
     interview_starts_at: opportunity.interviewStartsAt,
@@ -84,6 +105,7 @@ export async function seedUserOpportunities(userId: string, opportunities: Oppor
     source_links: opportunity.sourceLinks ?? [],
     job_posting_url: opportunity.jobPostingUrl,
     application_url: opportunity.applicationUrl,
+    data_quality_notes: opportunity.dataQualityNotes ?? [],
     extraction_confidence: opportunity.extractionConfidence,
     source_account_id: opportunity.sourceAccountId,
     source_job_id: opportunity.sourceJobId,

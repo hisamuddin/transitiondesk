@@ -34,6 +34,7 @@ alter table public.opportunities
   add column if not exists last_source_sync_at timestamptz,
   add column if not exists contact_name text,
   add column if not exists contact_channel text,
+  add column if not exists contact_email text,
   add column if not exists role_responsibilities jsonb not null default '[]'::jsonb,
   add column if not exists interview_starts_at timestamptz,
   add column if not exists interview_details text,
@@ -43,6 +44,7 @@ alter table public.opportunities
   add column if not exists source_links jsonb not null default '[]'::jsonb,
   add column if not exists job_posting_url text,
   add column if not exists application_url text,
+  add column if not exists data_quality_notes jsonb not null default '[]'::jsonb,
   add column if not exists extraction_confidence integer,
   add column if not exists attachments jsonb not null default '[]'::jsonb;
 

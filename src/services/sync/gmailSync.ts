@@ -135,6 +135,7 @@ async function gmailFetch<T>(url: string, accessToken: string) {
 function toRawApplication(message: GmailMessageResponse): RawJobApplication | null {
   const subject = readHeader(message, "Subject");
   const from = readHeader(message, "From");
+  const sender = parseSender(from);
   const snippet = message.snippet ?? "";
   const body = extractMessageBody(message);
   const attachmentNames = extractAttachmentNames(message);
@@ -145,8 +146,9 @@ function toRawApplication(message: GmailMessageResponse): RawJobApplication | nu
   const fullText = `${subject} ${from} ${snippet} ${bodyText} ${links.join(" ")}`;
   const source = inferSource(fullText);
   const company = inferCompany(subject, from, bodyText, source);
-  const role = inferRole(subject, bodyText);
+  const role = inferRole(subject, bodyText, jobPostingUrl);
   const status = inferStatus(fullText);
+  const dataQualityNotes = buildDataQualityNotes({ applicationUrl, attachmentNames, company, jobPostingUrl, role });
 
   if (!company && !role && !jobPostingUrl && source === "emailParsing") {
     return null;
@@ -164,7 +166,7 @@ function toRawApplication(message: GmailMessageResponse): RawJobApplication | nu
     source,
     sourceJobId: message.id,
     companyName: company ?? "Inbox lead",
-    jobTitle: role ?? "Role mentioned in email",
+    jobTitle: role ?? titleFromSource(source, subject),
     status,
     notes,
     roleResponsibilities: inferResponsibilities(bodyText),
@@ -176,6 +178,9 @@ function toRawApplication(message: GmailMessageResponse): RawJobApplication | nu
     sourceLinks: links,
     jobPostingUrl,
     applicationUrl,
+    contact: sender.name,
+    contactEmail: sender.email,
+    dataQualityNotes,
     extractionConfidence: scoreExtraction({ company, role, status, snippet: bodyText, links }),
     attachments: attachmentNames,
     receivedAt: message.internalDate ? new Date(Number(message.internalDate)).toISOString() : undefined
@@ -240,18 +245,44 @@ function inferCompany(subject: string, from: string, snippet: string, source: So
   );
 }
 
-function inferRole(subject: string, snippet: string) {
+function inferRole(subject: string, snippet: string, jobPostingUrl?: string) {
   return (
     extractWithPatterns(subject, [
+      /(?:for|to|as)\s+(?:the\s+)?(?:position|role|job)?\s*[:\-]?\s*([A-Z][A-Za-z0-9+\/,&()\- ]{2,80})/i,
       /for\s+([A-Z][A-Za-z0-9+\/,&()\- ]{2,80})/i,
       /role[: -]\s*([A-Z][A-Za-z0-9+\/,&()\- ]{2,80})/i,
       /position[: -]\s*([A-Z][A-Za-z0-9+\/,&()\- ]{2,80})/i
     ]) ??
     extractWithPatterns(snippet, [
+      /(?:job title|title|role|position)\s*[:\-]\s*([A-Z][A-Za-z0-9+\/,&()\- ]{2,80})/i,
+      /(?:applied|applying|application)\s+(?:for|to)\s+(?:the\s+)?([A-Z][A-Za-z0-9+\/,&()\- ]{2,80})/i,
       /for\s+([A-Z][A-Za-z0-9+\/,&()\- ]{2,80})/i,
       /position(?: of)?\s+([A-Z][A-Za-z0-9+\/,&()\- ]{2,80})/i
-    ])
+    ]) ??
+    inferRoleFromUrl(jobPostingUrl)
   );
+}
+
+function titleFromSource(source: SourceType, subject: string) {
+  const cleanedSubject = subject.replace(/^(re|fwd):\s*/i, "").trim();
+  if (cleanedSubject && !/(glassdoor|linkedin|naukri|indeed|hirist|application update|job alert)/i.test(cleanedSubject)) {
+    return cleanedSubject.slice(0, 80);
+  }
+
+  return source === "emailParsing" ? "Application update from email" : `${source} application update`;
+}
+
+function parseSender(from: string) {
+  const match = from.match(/^(.*?)\s*<([^>]+)>$/);
+  const rawName = match?.[1]?.trim().replace(/^"|"$/g, "") ?? "";
+  const email = match?.[2]?.trim() ?? (from.includes("@") ? from.trim() : undefined);
+  const name = rawName && !isGenericContact(rawName) ? rawName : undefined;
+
+  return { email, name };
+}
+
+function isGenericContact(value: string) {
+  return /\b(no-?reply|notification|jobs|careers|support|team|mail|glassdoor|linkedin|indeed|naukri|hirist)\b/i.test(value);
 }
 
 function extractMessageBody(message: GmailMessageResponse) {
@@ -380,6 +411,65 @@ function inferApplicationUrl(links: string[]) {
   return links.find((url) =>
     /(apply|application|candidate|profile|dashboard|myworkdayjobs|workdayjobs|greenhouse\.io|lever\.co|smartrecruiters)/i.test(url)
   );
+}
+
+function inferRoleFromUrl(url?: string) {
+  if (!url) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const searchTitle = parsed.searchParams.get("jobTitle") ?? parsed.searchParams.get("title") ?? parsed.searchParams.get("role");
+    if (searchTitle) {
+      return toTitleCase(searchTitle);
+    }
+
+    const slug = parsed.pathname
+      .split("/")
+      .filter(Boolean)
+      .reverse()
+      .find((part) => /[a-z]+[-_][a-z]+/i.test(part) && !/(apply|jobs|job|careers|candidate|details)/i.test(part));
+
+    return slug ? toTitleCase(slug.replace(/\.(html?|aspx)$/i, "")) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function toTitleCase(value: string) {
+  return decodeURIComponent(value)
+    .replace(/[-_+]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase())
+    .slice(0, 80);
+}
+
+function buildDataQualityNotes(input: {
+  applicationUrl?: string;
+  attachmentNames: string[];
+  company?: string;
+  jobPostingUrl?: string;
+  role?: string;
+}) {
+  const notes: string[] = [];
+  if (!input.role) {
+    notes.push("Role title was not explicit in the email; open the job link or resync after the portal email includes a title.");
+  }
+  if (!input.company) {
+    notes.push("Company was inferred from sender or link, not confirmed by a structured field.");
+  }
+  if (!input.jobPostingUrl) {
+    notes.push("No job posting link was found in the email body.");
+  }
+  if (!input.applicationUrl) {
+    notes.push("No separate application link was found.");
+  }
+  if (!input.attachmentNames.length) {
+    notes.push("No attachments were present in the email.");
+  }
+  return notes;
 }
 
 function inferResponsibilities(snippet: string) {

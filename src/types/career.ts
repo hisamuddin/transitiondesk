@@ -36,6 +36,7 @@ export type Opportunity = {
   matchScore: number;
   contactName?: string;
   contactChannel?: string;
+  contactEmail?: string;
   notes: string;
   roleResponsibilities?: string[];
   interviewStartsAt?: string;
@@ -46,6 +47,7 @@ export type Opportunity = {
   sourceLinks?: string[];
   jobPostingUrl?: string;
   applicationUrl?: string;
+  dataQualityNotes?: string[];
   extractionConfidence?: number;
   sourceAccountId?: string;
   sourceJobId?: string;

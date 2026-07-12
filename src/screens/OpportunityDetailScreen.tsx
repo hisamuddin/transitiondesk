@@ -118,6 +118,11 @@ export function OpportunityDetailScreen({ route }: Props) {
         <Text style={styles.sectionTitle}>Contact</Text>
         <Text style={styles.rowTitle}>{opportunity.contactName ?? "No contact yet"}</Text>
         <Text style={styles.meta}>{opportunity.contactChannel ?? "Add recruiter, referrer, or hiring manager details."}</Text>
+        {opportunity.contactEmail ? (
+          <Pressable onPress={() => Linking.openURL(`mailto:${opportunity.contactEmail}`)}>
+            <Text style={styles.inlineLink}>{opportunity.contactEmail}</Text>
+          </Pressable>
+        ) : null}
       </AppCard>
 
       <AppCard>
@@ -144,6 +149,14 @@ export function OpportunityDetailScreen({ route }: Props) {
               <Pressable key={link} onPress={() => Linking.openURL(link)}>
                 <Text style={styles.inlineLink} numberOfLines={2}>{link}</Text>
               </Pressable>
+            ))}
+          </>
+        ) : null}
+        {opportunity.dataQualityNotes?.length ? (
+          <>
+            <Text style={styles.subsectionTitle}>Needs review</Text>
+            {opportunity.dataQualityNotes.map((note) => (
+              <Text key={note} style={styles.bullet}>- {note}</Text>
             ))}
           </>
         ) : null}
