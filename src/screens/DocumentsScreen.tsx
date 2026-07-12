@@ -9,6 +9,7 @@ import { draftCoverLetter } from "../services/ai/careerAssistant";
 import { pickCareerDocument } from "../services/documents/documentStorage";
 import { logActivity } from "../services/supabase/activity";
 import { loadUserOpportunitiesQuietly } from "../services/supabase/opportunities";
+import { SavedResumeVersion, loadResumeVersions, saveResumeVersion } from "../services/supabase/transitionData";
 import { colors } from "../theme/colors";
 import { Opportunity } from "../types/career";
 
@@ -24,6 +25,7 @@ export function DocumentsScreen() {
   const [assistantText, setAssistantText] = useState("");
   const [opportunities, setOpportunities] = useState<Opportunity[]>(isDemo ? demoOpportunities : []);
   const [importedDocuments, setImportedDocuments] = useState<ImportedDocument[]>([]);
+  const [resumeVersions, setResumeVersions] = useState<SavedResumeVersion[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -35,13 +37,18 @@ export function DocumentsScreen() {
       }
 
       try {
-        const records = await loadUserOpportunitiesQuietly(user.id);
+        const [records, savedResumes] = await Promise.all([
+          loadUserOpportunitiesQuietly(user.id),
+          loadResumeVersions(user.id)
+        ]);
         if (active) {
           setOpportunities(records ?? []);
+          setResumeVersions(savedResumes);
         }
       } catch {
         if (active) {
           setOpportunities([]);
+          setResumeVersions([]);
         }
       }
     }
@@ -52,8 +59,11 @@ export function DocumentsScreen() {
     };
   }, [isDemo, user?.id]);
 
-  const documentSummary = useMemo(() => buildDocumentSummary(opportunities, importedDocuments), [importedDocuments, opportunities]);
-  const topOpportunity = documentSummary.bestOpportunity ?? opportunities[0] ?? demoOpportunities[0];
+  const documentSummary = useMemo(
+    () => buildDocumentSummary(opportunities, importedDocuments, resumeVersions),
+    [importedDocuments, opportunities, resumeVersions]
+  );
+  const topOpportunity = documentSummary.bestOpportunity ?? opportunities[0] ?? (isDemo ? demoOpportunities[0] : undefined);
 
   async function handleImportDocument() {
     const document = await pickCareerDocument();
@@ -64,12 +74,29 @@ export function DocumentsScreen() {
         uri: document.uri
       };
       setImportedDocuments((current) => [importedDocument, ...current]);
+      const resumeVersion = {
+        id: `${Date.now()}-${document.name}`,
+        fileName: document.name,
+        mimeType: document.mimeType,
+        targetRole: topOpportunity?.role ?? "General job switch resume",
+        versionNumber: resumeVersions.length + 1,
+        uploadedAt: new Date().toISOString(),
+        sourceOpportunityId: topOpportunity?.id,
+        notes: topOpportunity ? `Prepared for ${topOpportunity.company}` : "Imported by candidate"
+      } satisfies SavedResumeVersion;
+      setResumeVersions((current) => [resumeVersion, ...current]);
+      await saveResumeVersion(user?.id, resumeVersion);
       logActivity(user?.id, "import_document", { name: document.name, mimeType: document.mimeType });
-      Alert.alert("Document saved", document.name);
+      Alert.alert("Resume version saved", `${document.name} is now v${resumeVersion.versionNumber} in your resume library.`);
     }
   }
 
   async function handleDraftCoverLetter() {
+    if (!topOpportunity) {
+      Alert.alert("Sync an opportunity first", "A cover letter needs a real company and role from your pipeline.");
+      return;
+    }
+
     const draft = await draftCoverLetter(topOpportunity);
     await logActivity(user?.id, "draft_cover_letter", { company: topOpportunity.company }, "opportunity", topOpportunity.id);
     setAssistantText(draft);
@@ -109,6 +136,7 @@ export function DocumentsScreen() {
       <View style={styles.metrics}>
         <Metric label="Synced roles" value={String(opportunities.length)} />
         <Metric label="Attachments" value={String(documentSummary.totalAttachments)} />
+        <Metric label="Resume versions" value={String(resumeVersions.length)} />
         <Metric label="Job links" value={String(documentSummary.linkedOpportunities)} />
         <Metric label="Needs docs" value={String(documentSummary.missingDocumentCount)} />
       </View>
@@ -125,6 +153,26 @@ export function DocumentsScreen() {
           <Detail label="Evidence" value={formatEvidence(documentSummary.bestOpportunity)} />
           <Detail label="Next action" value={documentSummary.bestOpportunity?.nextAction ?? "Reconnect Gmail, sync inbox, then attach the current resume."} />
         </View>
+      </AppCard>
+
+      <AppCard>
+        <Text style={styles.rowTitle}>Resume version library</Text>
+        {resumeVersions.length > 0 ? (
+          resumeVersions.map((resume) => (
+            <View key={resume.id} style={styles.attachmentRow}>
+              <View style={styles.copy}>
+                <Text style={styles.attachmentName}>v{resume.versionNumber} - {resume.fileName}</Text>
+                <Text style={styles.meta}>{resume.targetRole || "Target role not set"} - uploaded {formatDate(resume.uploadedAt)}</Text>
+                {resume.notes ? <Text style={styles.meta}>{resume.notes}</Text> : null}
+              </View>
+              <Text style={styles.badge}>Resume</Text>
+            </View>
+          ))
+        ) : (
+          <Text style={styles.meta}>
+            No resume versions saved yet. Import your latest resume and the app will store it as a version tied to your current best-fit opportunity.
+          </Text>
+        )}
       </AppCard>
 
       <AppCard>
@@ -193,7 +241,11 @@ function Detail({ label, value }: { label: string; value: string }) {
   );
 }
 
-function buildDocumentSummary(opportunities: Opportunity[], importedDocuments: ImportedDocument[]) {
+function buildDocumentSummary(
+  opportunities: Opportunity[],
+  importedDocuments: ImportedDocument[],
+  resumeVersions: SavedResumeVersion[]
+) {
   const attachmentRows = opportunities.flatMap((opportunity) =>
     (opportunity.attachments ?? []).map((name) => ({
       company: opportunity.company,
@@ -211,11 +263,12 @@ function buildDocumentSummary(opportunities: Opportunity[], importedDocuments: I
   const missingDocumentCount = Math.max(opportunities.length - opportunitiesWithDocuments, 0);
   const bestOpportunity = [...opportunities].sort((left, right) => scoreOpportunity(right) - scoreOpportunity(left))[0];
   const readinessScore = opportunities.length === 0
-    ? importedDocuments.length > 0 ? 35 : 0
-    : Math.min(100, Math.round(((opportunitiesWithDocuments + linkedOpportunities + importedDocuments.length) / (opportunities.length * 2 + 1)) * 100));
+    ? resumeVersions.length > 0 || importedDocuments.length > 0 ? 35 : 0
+    : Math.min(100, Math.round(((opportunitiesWithDocuments + linkedOpportunities + resumeVersions.length + importedDocuments.length) / (opportunities.length * 2 + 2)) * 100));
 
   const actions = [
     opportunities.length === 0 ? "Sync Gmail inbox to create real opportunity records." : "",
+    resumeVersions.length === 0 ? "Import at least one current resume so applications can be tied back to resume versions." : "",
     attachmentRows.length === 0 ? "Reconnect Gmail and sync again to capture resume, JD, or PDF attachment filenames." : "",
     missingDocumentCount > 0 ? `Attach or import the resume used for ${missingDocumentCount} synced role${missingDocumentCount === 1 ? "" : "s"}.` : "",
     linkedOpportunities < opportunities.length ? "Open source job links and confirm role title, recruiter contact, and responsibilities." : "",
@@ -231,6 +284,14 @@ function buildDocumentSummary(opportunities: Opportunity[], importedDocuments: I
     readinessScore,
     totalAttachments: attachmentRows.length
   };
+}
+
+function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "recently";
+  }
+  return date.toLocaleDateString();
 }
 
 function scoreOpportunity(opportunity: Opportunity) {
