@@ -34,9 +34,17 @@ alter table public.opportunities
   add column if not exists last_source_sync_at timestamptz,
   add column if not exists attachments jsonb not null default '[]'::jsonb;
 
+delete from public.opportunities older
+using public.opportunities newer
+where older.fingerprint is not null
+  and older.user_id = newer.user_id
+  and older.fingerprint = newer.fingerprint
+  and (older.updated_at, older.created_at, older.id) < (newer.updated_at, newer.created_at, newer.id);
+
+drop index if exists public.opportunities_user_fingerprint_idx;
+
 create unique index if not exists opportunities_user_fingerprint_idx
-  on public.opportunities(user_id, fingerprint)
-  where fingerprint is not null;
+  on public.opportunities(user_id, fingerprint);
 
 create table if not exists public.activity_events (
   id uuid primary key default gen_random_uuid(),
