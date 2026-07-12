@@ -5,7 +5,19 @@ export type TransitionProfile = {
   noticePeriodDays: string;
   lastWorkingDay: string;
   currentRole: string;
+  currentCompany: string;
+  currentCtc: string;
+  expectedCtc: string;
+  experienceYears: string;
   desiredRoles: string;
+  preferredLocations: string;
+  workMode: string;
+  targetCompanies: string;
+  technologies: string;
+  interviewAvailability: string;
+  joiningTimeline: string;
+  switchReason: string;
+  confidential: boolean;
 };
 
 export type SavedResumeVersion = {
@@ -24,7 +36,19 @@ const emptyProfile: TransitionProfile = {
   noticePeriodDays: "",
   lastWorkingDay: "",
   currentRole: "",
-  desiredRoles: ""
+  currentCompany: "",
+  currentCtc: "",
+  expectedCtc: "",
+  experienceYears: "",
+  desiredRoles: "",
+  preferredLocations: "",
+  workMode: "",
+  targetCompanies: "",
+  technologies: "",
+  interviewAvailability: "",
+  joiningTimeline: "",
+  switchReason: "",
+  confidential: false
 };
 
 export function getEmptyTransitionProfile() {
@@ -49,7 +73,9 @@ export async function loadTransitionProfile(userId: string | undefined): Promise
     return emptyProfile;
   }
 
-  if (supabase) {
+  const localProfile = readLocalProfile(userId);
+
+  if (supabase && isUuid(userId)) {
     const { data, error } = await supabase
       .from("activity_events")
       .select("metadata")
@@ -63,7 +89,7 @@ export async function loadTransitionProfile(userId: string | undefined): Promise
     }
   }
 
-  return readLocalProfile(userId);
+  return localProfile;
 }
 
 export async function saveTransitionProfile(userId: string | undefined, profile: TransitionProfile) {
@@ -78,7 +104,11 @@ export async function saveTransitionProfile(userId: string | undefined, profile:
 
   writeLocalProfile(userId, normalized);
 
-  if (supabase) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("transitiondesk:profile-saved", { detail: normalized }));
+  }
+
+  if (supabase && isUuid(userId)) {
     await supabase.from("activity_events").insert({
       user_id: userId,
       event_type: "transition_profile_saved",
@@ -94,7 +124,9 @@ export async function loadResumeVersions(userId: string | undefined): Promise<Sa
     return [];
   }
 
-  if (supabase) {
+  const localResumeVersions = readLocalResumeVersions(userId);
+
+  if (supabase && isUuid(userId)) {
     const { data, error } = await supabase
       .from("activity_events")
       .select("metadata")
@@ -104,11 +136,12 @@ export async function loadResumeVersions(userId: string | undefined): Promise<Sa
       .limit(25);
 
     if (!error && data) {
-      return data.map((row) => normalizeResumeVersion(row.metadata)).filter(Boolean) as SavedResumeVersion[];
+      const remoteResumeVersions = data.map((row) => normalizeResumeVersion(row.metadata)).filter(Boolean) as SavedResumeVersion[];
+      return mergeResumeVersions(remoteResumeVersions, localResumeVersions);
     }
   }
 
-  return readLocalResumeVersions(userId);
+  return localResumeVersions;
 }
 
 export async function saveResumeVersion(userId: string | undefined, resumeVersion: SavedResumeVersion) {
@@ -119,7 +152,11 @@ export async function saveResumeVersion(userId: string | undefined, resumeVersio
   const current = readLocalResumeVersions(userId);
   writeLocalResumeVersions(userId, [resumeVersion, ...current.filter((resume) => resume.id !== resumeVersion.id)]);
 
-  if (supabase) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("transitiondesk:resume-saved", { detail: resumeVersion }));
+  }
+
+  if (supabase && isUuid(userId)) {
     await supabase.from("activity_events").insert({
       user_id: userId,
       event_type: "resume_version_saved",
@@ -137,7 +174,19 @@ function normalizeTransitionProfile(value: unknown): TransitionProfile {
     noticePeriodDays: String(record.noticePeriodDays ?? ""),
     lastWorkingDay: String(record.lastWorkingDay ?? ""),
     currentRole: String(record.currentRole ?? ""),
-    desiredRoles: String(record.desiredRoles ?? "")
+    currentCompany: String(record.currentCompany ?? ""),
+    currentCtc: String(record.currentCtc ?? ""),
+    expectedCtc: String(record.expectedCtc ?? ""),
+    experienceYears: String(record.experienceYears ?? ""),
+    desiredRoles: String(record.desiredRoles ?? ""),
+    preferredLocations: String(record.preferredLocations ?? ""),
+    workMode: String(record.workMode ?? ""),
+    targetCompanies: String(record.targetCompanies ?? ""),
+    technologies: String(record.technologies ?? ""),
+    interviewAvailability: String(record.interviewAvailability ?? ""),
+    joiningTimeline: String(record.joiningTimeline ?? ""),
+    switchReason: String(record.switchReason ?? ""),
+    confidential: record.confidential === true || record.confidential === "true"
   };
 }
 
@@ -200,4 +249,14 @@ function writeLocalValue(key: string, value: unknown) {
   } catch {
     // Some browser privacy modes block local storage.
   }
+}
+
+function mergeResumeVersions(remote: SavedResumeVersion[], local: SavedResumeVersion[]) {
+  const byId = new Map<string, SavedResumeVersion>();
+  [...remote, ...local].forEach((resumeVersion) => byId.set(resumeVersion.id, resumeVersion));
+  return Array.from(byId.values()).sort((left, right) => Date.parse(right.uploadedAt) - Date.parse(left.uploadedAt));
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

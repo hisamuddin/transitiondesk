@@ -22,6 +22,7 @@ type ImportedDocument = {
 export function DocumentsScreen() {
   const user = useAuthUser();
   const isDemo = user?.authProvider === "demo";
+  const userStorageKey = user?.id ?? user?.email;
   const [assistantText, setAssistantText] = useState("");
   const [opportunities, setOpportunities] = useState<Opportunity[]>(isDemo ? demoOpportunities : []);
   const [importedDocuments, setImportedDocuments] = useState<ImportedDocument[]>([]);
@@ -31,15 +32,15 @@ export function DocumentsScreen() {
     let active = true;
 
     async function loadDocumentsContext() {
-      if (!user?.id || isDemo) {
+      if (!userStorageKey || isDemo) {
         setOpportunities(isDemo ? demoOpportunities : []);
         return;
       }
 
       try {
         const [records, savedResumes] = await Promise.all([
-          loadUserOpportunitiesQuietly(user.id),
-          loadResumeVersions(user.id)
+          user?.id ? loadUserOpportunitiesQuietly(user.id) : Promise.resolve(null),
+          loadResumeVersions(userStorageKey)
         ]);
         if (active) {
           setOpportunities(records ?? []);
@@ -57,7 +58,7 @@ export function DocumentsScreen() {
     return () => {
       active = false;
     };
-  }, [isDemo, user?.id]);
+  }, [isDemo, user?.id, userStorageKey]);
 
   const documentSummary = useMemo(
     () => buildDocumentSummary(opportunities, importedDocuments, resumeVersions),
@@ -85,7 +86,7 @@ export function DocumentsScreen() {
         notes: topOpportunity ? `Prepared for ${topOpportunity.company}` : "Imported by candidate"
       } satisfies SavedResumeVersion;
       setResumeVersions((current) => [resumeVersion, ...current]);
-      await saveResumeVersion(user?.id, resumeVersion);
+      await saveResumeVersion(userStorageKey, resumeVersion);
       logActivity(user?.id, "import_document", { name: document.name, mimeType: document.mimeType });
       Alert.alert("Resume version saved", `${document.name} is now v${resumeVersion.versionNumber} in your resume library.`);
     }

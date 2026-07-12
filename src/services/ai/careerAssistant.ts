@@ -5,7 +5,7 @@ const apiKey = env.EXPO_PUBLIC_OPENAI_API_KEY;
 
 async function callAssistant(prompt: string) {
   if (!apiKey) {
-    return "Add EXPO_PUBLIC_OPENAI_API_KEY to enable live AI assistance.";
+    return "";
   }
 
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -62,9 +62,39 @@ export async function suggestResumeImprovements(opportunity: Opportunity, resume
 }
 
 export async function draftCoverLetter(opportunity: Opportunity) {
-  return callAssistant(buildCoverLetterPrompt(opportunity));
+  const aiDraft = await callAssistant(buildCoverLetterPrompt(opportunity));
+  if (aiDraft) {
+    return aiDraft;
+  }
+
+  return [
+    `Hi ${opportunity.contactName ?? "Recruiter"},`,
+    "",
+    `I am interested in the ${opportunity.role} opportunity at ${opportunity.company}. My background aligns with the role through ${summarizeFit(opportunity)}.`,
+    "",
+    "I would be happy to discuss how my experience can help the team. Please let me know a convenient time to connect.",
+    "",
+    "Regards"
+  ].join("\n");
 }
 
 export async function draftFollowUp(opportunity: Opportunity) {
-  return callAssistant(buildFollowUpPrompt(opportunity));
+  const aiDraft = await callAssistant(buildFollowUpPrompt(opportunity));
+  if (aiDraft) {
+    return aiDraft;
+  }
+
+  return [
+    `Hi ${opportunity.contactName ?? "there"},`,
+    "",
+    `I wanted to check whether there is any update regarding my application for the ${opportunity.role} position at ${opportunity.company}.`,
+    "I remain interested in the opportunity and would appreciate any feedback or next steps.",
+    "",
+    "Regards"
+  ].join("\n");
+}
+
+function summarizeFit(opportunity: Opportunity) {
+  const responsibilities = opportunity.roleResponsibilities?.slice(0, 3).join(", ");
+  return responsibilities || opportunity.notes || "relevant engineering, product, and execution experience";
 }

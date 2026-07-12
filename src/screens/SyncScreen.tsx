@@ -369,7 +369,7 @@ async function requestGmailReconnect() {
   const { error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${window.location.origin}/MainTabs/Sync?gmailConnect=1`,
+      redirectTo: `${window.location.origin}?gmailConnect=1`,
       scopes: [
         "openid",
         "email",

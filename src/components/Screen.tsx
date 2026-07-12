@@ -1,34 +1,42 @@
 import { ReactNode, useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthUser, useSignOut } from "./AuthGate";
 import { opportunities as demoOpportunities } from "../data/seed";
 import { loadUserOpportunitiesQuietly } from "../services/supabase/opportunities";
+import { TransitionProfile, getEmptyTransitionProfile, loadTransitionProfile } from "../services/supabase/transitionData";
 import { colors } from "../theme/colors";
 import { Opportunity } from "../types/career";
 
-export function Screen({ children }: { children: ReactNode }) {
+export function Screen({ children, onRefresh }: { children: ReactNode; onRefresh?: () => Promise<void> | void }) {
   const user = useAuthUser();
   const signOut = useSignOut();
   const [syncedOpportunities, setSyncedOpportunities] = useState<Opportunity[]>([]);
+  const [transitionProfile, setTransitionProfile] = useState<TransitionProfile>(getEmptyTransitionProfile());
   const [targetOpen, setTargetOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const isDemo = user?.authProvider === "demo";
+  const userStorageKey = user?.id ?? user?.email;
 
   useEffect(() => {
     let active = true;
 
     async function loadTargetContext() {
-      if (!user?.id || isDemo) {
+      if (!userStorageKey || isDemo) {
         setSyncedOpportunities(isDemo ? demoOpportunities : []);
         return;
       }
 
       try {
-        const records = await loadUserOpportunitiesQuietly(user.id);
+        const [records, profile] = await Promise.all([
+          user?.id ? loadUserOpportunitiesQuietly(user.id) : Promise.resolve(null),
+          loadTransitionProfile(userStorageKey)
+        ]);
         if (active) {
           setSyncedOpportunities(records ?? []);
+          setTransitionProfile(profile);
         }
       } catch {
         if (active) {
@@ -41,18 +49,51 @@ export function Screen({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [isDemo, user?.id]);
+  }, [isDemo, user?.id, userStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    function handleProfileSaved(event: Event) {
+      setTransitionProfile((event as CustomEvent<TransitionProfile>).detail);
+    }
+
+    window.addEventListener("transitiondesk:profile-saved", handleProfileSaved);
+    return () => window.removeEventListener("transitiondesk:profile-saved", handleProfileSaved);
+  }, []);
 
   const targetOpportunity = useMemo(() => pickTargetOpportunity(syncedOpportunities), [syncedOpportunities]);
-  const targetLabel = targetOpportunity
+  const savedTargetLabel = transitionProfile.desiredRoles
+    ? `${transitionProfile.currentRole || "Current role"} -> ${transitionProfile.desiredRoles}`
+    : "";
+  const targetLabel = savedTargetLabel || (targetOpportunity
     ? `${targetOpportunity.role} at ${targetOpportunity.company}`
-    : "Target role not synced yet";
+    : "Target role not synced yet");
   const candidateName = user?.name || user?.email || "Candidate";
-  const targetNeedsReview = targetOpportunity ? needsRoleReview(targetOpportunity.role) : true;
+  const targetNeedsReview = !savedTargetLabel && (targetOpportunity ? needsRoleReview(targetOpportunity.role) : true);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      if (onRefresh) {
+        await onRefresh();
+      } else if (Platform.OS === "web" && typeof window !== "undefined") {
+        window.location.reload();
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.blue} />}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.header}>
           <View style={styles.headerCopy}>
             <Text style={styles.brand}>Transition Desk</Text>
@@ -85,6 +126,40 @@ export function Screen({ children }: { children: ReactNode }) {
             <View style={styles.panelRow}>
               <Text style={styles.panelLabel}>Target</Text>
               <Text style={styles.panelValue}>{targetLabel}</Text>
+            </View>
+            <View style={styles.panelGrid}>
+              <View style={styles.panelGridItem}>
+                <Text style={styles.panelLabel}>Current company</Text>
+                <Text style={styles.panelValue}>{transitionProfile.currentCompany || "Not saved"}</Text>
+              </View>
+              <View style={styles.panelGridItem}>
+                <Text style={styles.panelLabel}>CTC target</Text>
+                <Text style={styles.panelValue}>
+                  {transitionProfile.currentCtc || transitionProfile.expectedCtc
+                    ? `${transitionProfile.currentCtc || "Current?"} -> ${transitionProfile.expectedCtc || "Expected?"}`
+                    : "Not saved"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.panelGrid}>
+              <View style={styles.panelGridItem}>
+                <Text style={styles.panelLabel}>Resignation</Text>
+                <Text style={styles.panelValue}>{transitionProfile.resignationDate || "Not saved"}</Text>
+              </View>
+              <View style={styles.panelGridItem}>
+                <Text style={styles.panelLabel}>Last working day</Text>
+                <Text style={styles.panelValue}>{transitionProfile.lastWorkingDay || "Not saved"}</Text>
+              </View>
+            </View>
+            <View style={styles.panelGrid}>
+              <View style={styles.panelGridItem}>
+                <Text style={styles.panelLabel}>Interview time</Text>
+                <Text style={styles.panelValue}>{transitionProfile.interviewAvailability || "Not saved"}</Text>
+              </View>
+              <View style={styles.panelGridItem}>
+                <Text style={styles.panelLabel}>Confidential</Text>
+                <Text style={styles.panelValue}>{transitionProfile.confidential ? "On" : "Off"}</Text>
+              </View>
             </View>
             <View style={styles.panelRow}>
               <Text style={styles.panelLabel}>Next action</Text>
@@ -220,6 +295,16 @@ const styles = StyleSheet.create({
     fontWeight: "900"
   },
   panelRow: {
+    gap: 3
+  },
+  panelGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10
+  },
+  panelGridItem: {
+    flexBasis: 180,
+    flexGrow: 1,
     gap: 3
   },
   panelLabel: {

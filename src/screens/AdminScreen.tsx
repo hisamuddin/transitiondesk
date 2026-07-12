@@ -77,12 +77,21 @@ export function AdminScreen() {
       </View>
 
       <Text style={styles.sectionTitle}>Recent activity</Text>
-      {activity.map((event) => (
-        <AppCard key={event.id}>
-          <Text style={styles.rowTitle}>{event.event_type}</Text>
-          <Text style={styles.meta}>{event.profiles?.email ?? "Unknown user"} - {new Date(event.created_at).toLocaleString()}</Text>
-        </AppCard>
-      ))}
+      <AppCard>
+        <View style={styles.tableHeader}>
+          <Text style={[styles.tableCell, styles.tableHeadCell]}>Event</Text>
+          <Text style={[styles.tableCell, styles.tableHeadCell]}>User</Text>
+          <Text style={[styles.tableCell, styles.tableHeadCell]}>Time</Text>
+        </View>
+        {activity.slice(0, 12).map((event) => (
+          <View key={event.id} style={styles.tableRow}>
+            <Text style={styles.tableCell} numberOfLines={1}>{event.event_type}</Text>
+            <Text style={styles.tableCell} numberOfLines={1}>{event.profiles?.email ?? "Unknown user"}</Text>
+            <Text style={styles.tableCell} numberOfLines={1}>{new Date(event.created_at).toLocaleString()}</Text>
+          </View>
+        ))}
+        {activity.length === 0 ? <Text style={styles.meta}>No recent activity found.</Text> : null}
+      </AppCard>
     </Screen>
   );
 }
@@ -111,15 +120,35 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginTop: 4
   },
-  rowTitle: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: "800"
-  },
   meta: {
     color: colors.muted,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 5
+  },
+  tableHeader: {
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    flexDirection: "row",
+    paddingHorizontal: 10,
+    paddingVertical: 10
+  },
+  tableRow: {
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    flexDirection: "row",
+    paddingHorizontal: 10,
+    paddingVertical: 10
+  },
+  tableCell: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "700"
+  },
+  tableHeadCell: {
+    color: colors.muted,
+    fontWeight: "900",
+    textTransform: "uppercase"
   }
 });

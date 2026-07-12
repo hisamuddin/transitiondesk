@@ -23,7 +23,7 @@ import {
 import { colors } from "../theme/colors";
 import { ConnectedAccount, Opportunity, OpportunityStage } from "../types/career";
 
-type Navigation = NativeStackNavigationProp<RootStackParamList>;
+type Navigation = NativeStackNavigationProp<RootStackParamList> & { navigate: (screen: string, params?: unknown) => void };
 
 const funnelStages: Array<{ label: string; stage: OpportunityStage }> = [
   { label: "Saved", stage: "saved" },
@@ -33,22 +33,49 @@ const funnelStages: Array<{ label: string; stage: OpportunityStage }> = [
   { label: "Offer", stage: "offer" }
 ];
 
+const lifecycleSteps = [
+  "Switch decision",
+  "Profile",
+  "Applications",
+  "Recruiter",
+  "Interviews",
+  "Offer",
+  "Resignation",
+  "Notice",
+  "BGV",
+  "Joining"
+];
+
 export function DashboardScreen() {
   const navigation = useNavigation<Navigation>();
   const user = useAuthUser();
   const isDemo = user?.authProvider === "demo";
+  const userStorageKey = user?.id ?? user?.email;
   const [workspaceOpportunities, setWorkspaceOpportunities] = useState<Opportunity[]>(isDemo ? demoOpportunities : []);
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [profile, setProfile] = useState<TransitionProfile>(getEmptyTransitionProfile());
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!user?.id || isDemo) {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("gmailConnect") === "1") {
+      navigation.navigate("Sync");
+      return;
+    }
+
+    refreshDashboard();
+  }, [isDemo, navigation, user?.id, userStorageKey]);
+
+  async function refreshDashboard() {
+    if (!userStorageKey || isDemo) {
       setWorkspaceOpportunities(isDemo ? demoOpportunities : []);
       return;
     }
 
-    Promise.all([loadUserOpportunities(user.id), loadConnectedAccounts(user.id), loadTransitionProfile(user.id)])
+    await Promise.all([
+      user?.id ? loadUserOpportunities(user.id) : Promise.resolve(null),
+      user?.id ? loadConnectedAccounts(user.id) : Promise.resolve([]),
+      loadTransitionProfile(userStorageKey)
+    ])
       .then(([nextOpportunities, nextAccounts, nextProfile]) => {
         setWorkspaceOpportunities(nextOpportunities ?? []);
         setAccounts(nextAccounts);
@@ -57,7 +84,7 @@ export function DashboardScreen() {
       .catch(() => {
         setWorkspaceOpportunities([]);
       });
-  }, [isDemo, user?.id]);
+  }
 
   const analytics = useMemo(() => buildTransitionAnalytics(workspaceOpportunities, profile), [profile, workspaceOpportunities]);
   const active = workspaceOpportunities.filter((opportunity) => opportunity.stage !== "closed");
@@ -86,7 +113,7 @@ export function DashboardScreen() {
   async function handleSaveProfile() {
     setSaving(true);
     try {
-      await saveTransitionProfile(user?.id, profile);
+      await saveTransitionProfile(userStorageKey, profile);
       await logActivity(user?.id, "save_transition_profile", {
         currentRole: profile.currentRole,
         desiredRoles: profile.desiredRoles,
@@ -100,7 +127,7 @@ export function DashboardScreen() {
   }
 
   return (
-    <Screen>
+    <Screen onRefresh={refreshDashboard}>
       <View>
         <Text style={styles.eyebrow}>Job transition dashboard</Text>
         <Text style={styles.title}>Notice, applications, recruiters, and offers</Text>
@@ -125,8 +152,31 @@ export function DashboardScreen() {
       </AppCard>
 
       <AppCard>
+        <Text style={styles.sectionTitle}>Lifecycle</Text>
+        <View style={styles.lifecycle}>
+          {lifecycleSteps.map((step, index) => (
+            <View
+              key={step}
+              style={[
+                styles.lifecycleStep,
+                index <= analytics.lifecycleIndex && styles.lifecycleStepActive
+              ]}
+            >
+              <Text style={[styles.lifecycleText, index <= analytics.lifecycleIndex && styles.lifecycleTextActive]}>{step}</Text>
+            </View>
+          ))}
+        </View>
+      </AppCard>
+
+      <AppCard>
         <Text style={styles.sectionTitle}>Transition data</Text>
         <View style={styles.formGrid}>
+          <Field
+            label="Current company"
+            onChangeText={(value) => updateProfile("currentCompany", value)}
+            placeholder="Current employer"
+            value={profile.currentCompany}
+          />
           <Field
             label="Resignation date"
             onChangeText={(value) => updateProfile("resignationDate", value)}
@@ -147,11 +197,74 @@ export function DashboardScreen() {
             value={profile.currentRole}
           />
           <Field
+            label="Experience"
+            keyboardType="numeric"
+            onChangeText={(value) => updateProfile("experienceYears", value.replace(/[^0-9.]/g, ""))}
+            placeholder="7"
+            value={profile.experienceYears}
+          />
+          <Field
             label="Desired roles"
             onChangeText={(value) => updateProfile("desiredRoles", value)}
             placeholder="DevOps, Cloud Engineer"
             value={profile.desiredRoles}
           />
+          <Field
+            label="Current CTC"
+            onChangeText={(value) => updateProfile("currentCtc", value)}
+            placeholder="28 LPA"
+            value={profile.currentCtc}
+          />
+          <Field
+            label="Expected CTC"
+            onChangeText={(value) => updateProfile("expectedCtc", value)}
+            placeholder="35 LPA"
+            value={profile.expectedCtc}
+          />
+          <Field
+            label="Locations"
+            onChangeText={(value) => updateProfile("preferredLocations", value)}
+            placeholder="Bengaluru, Hyderabad, Remote"
+            value={profile.preferredLocations}
+          />
+          <Field
+            label="Work mode"
+            onChangeText={(value) => updateProfile("workMode", value)}
+            placeholder="Remote / Hybrid / Office"
+            value={profile.workMode}
+          />
+          <Field
+            label="Technologies"
+            onChangeText={(value) => updateProfile("technologies", value)}
+            placeholder=".NET, Azure, Kubernetes"
+            value={profile.technologies}
+          />
+          <Field
+            label="Interview time"
+            onChangeText={(value) => updateProfile("interviewAvailability", value)}
+            placeholder="Weekdays after 7 PM"
+            value={profile.interviewAvailability}
+          />
+          <Field
+            label="Joining timeline"
+            onChangeText={(value) => updateProfile("joiningTimeline", value)}
+            placeholder="After notice period / early release"
+            value={profile.joiningTimeline}
+          />
+          <Field
+            label="Reason to switch"
+            onChangeText={(value) => updateProfile("switchReason", value)}
+            placeholder="Growth, compensation, tech stack"
+            value={profile.switchReason}
+          />
+          <Pressable
+            style={[styles.confidentialToggle, profile.confidential && styles.confidentialToggleActive]}
+            onPress={() => setProfile((current) => ({ ...current, confidential: !current.confidential }))}
+          >
+            <Text style={[styles.confidentialText, profile.confidential && styles.confidentialTextActive]}>
+              {profile.confidential ? "Confidential search on" : "Confidential search off"}
+            </Text>
+          </Pressable>
         </View>
         <View style={styles.saveRow}>
           <View>
@@ -333,10 +446,26 @@ function buildTransitionAnalytics(opportunities: Opportunity[], profile: Transit
     profile.noticePeriodDays,
     profile.lastWorkingDay,
     profile.currentRole,
-    profile.desiredRoles
+    profile.currentCompany,
+    profile.currentCtc,
+    profile.expectedCtc,
+    profile.experienceYears,
+    profile.desiredRoles,
+    profile.preferredLocations,
+    profile.workMode,
+    profile.technologies,
+    profile.interviewAvailability,
+    profile.joiningTimeline,
+    profile.switchReason
   ].filter(Boolean).length;
+  const lifecycleIndex = offersReceived > 0 ? 5
+    : interviewsBeforeLastDay > 0 ? 4
+      : contactsSynced > 0 ? 3
+        : opportunities.some((opportunity) => opportunity.stage === "applied") ? 2
+          : profileFields >= 4 ? 1
+            : 0;
   const readinessScore = Math.min(100, Math.round(
-    (profileFields / 5) * 40
+    (profileFields / 14) * 45
     + Math.min(opportunities.length, 10) * 3
     + Math.min(contactsSynced, 5) * 3
     + Math.min(interviewsBeforeLastDay, 3) * 5
@@ -355,6 +484,7 @@ function buildTransitionAnalytics(opportunities: Opportunity[], profile: Transit
     heatmap: buildHeatmap(opportunities),
     interviewsBeforeLastDay,
     interviewsThisWeek,
+    lifecycleIndex,
     offersReceived,
     readinessScore,
     recruiterResponseRate,
@@ -485,6 +615,32 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 12
   },
+  lifecycle: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 12
+  },
+  lifecycleStep: {
+    backgroundColor: colors.background,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8
+  },
+  lifecycleStepActive: {
+    backgroundColor: colors.greenSoft,
+    borderColor: "#bce8d8"
+  },
+  lifecycleText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  lifecycleTextActive: {
+    color: colors.green
+  },
   field: {
     flexBasis: 220,
     flexGrow: 1,
@@ -505,6 +661,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     minHeight: 44,
     paddingHorizontal: 12
+  },
+  confidentialToggle: {
+    alignItems: "center",
+    backgroundColor: colors.background,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexBasis: 220,
+    flexGrow: 1,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 12
+  },
+  confidentialToggleActive: {
+    backgroundColor: colors.violetSoft,
+    borderColor: "#d6cdfa"
+  },
+  confidentialText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  confidentialTextActive: {
+    color: colors.violet
   },
   saveRow: {
     alignItems: "center",
