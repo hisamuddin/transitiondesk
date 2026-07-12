@@ -143,6 +143,13 @@ function toRawApplication(message: GmailMessageResponse): RawJobApplication | nu
     jobTitle: role ?? "Role mentioned in email",
     status,
     notes,
+    roleResponsibilities: inferResponsibilities(snippet),
+    interviewStartsAt: inferInterviewDate(fullText, message.internalDate),
+    interviewDetails: inferInterviewDetails(fullText),
+    sourceSubject: subject,
+    sourceSnippet: snippet,
+    sourceReceivedAt: message.internalDate ? new Date(Number(message.internalDate)).toISOString() : undefined,
+    extractionConfidence: scoreExtraction({ company, role, status, snippet }),
     receivedAt: message.internalDate ? new Date(Number(message.internalDate)).toISOString() : undefined
   } satisfies RawJobApplication;
 }
@@ -217,6 +224,106 @@ function inferRole(subject: string, snippet: string) {
       /position(?: of)?\s+([A-Z][A-Za-z0-9+\/,&()\- ]{2,80})/i
     ])
   );
+}
+
+function inferResponsibilities(snippet: string) {
+  const normalized = snippet.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const responsibilityText = extractWithPatterns(normalized, [
+    /(?:responsibilities|what you'll do|you will|role includes)[: -]\s*([^.]*(?:\.[^.]*){0,2})/i,
+    /(?:looking for|seeking)\s+(?:someone|a candidate)?\s*(?:who can|to)\s+([^.]*(?:\.[^.]*){0,2})/i
+  ]);
+
+  if (!responsibilityText) {
+    return undefined;
+  }
+
+  const items = responsibilityText
+    .split(/(?:;|\s-\s|\s\|\s|,\s(?=(?:lead|own|build|design|partner|manage|create|develop|drive)\b))/i)
+    .map((item) => item.trim().replace(/^[*-]\s*/, ""))
+    .filter((item) => item.length > 10)
+    .slice(0, 3);
+
+  return items.length ? items : [responsibilityText];
+}
+
+function inferInterviewDate(text: string, internalDate?: string) {
+  if (!/(interview|availability|schedule|screen|call|meet)/i.test(text)) {
+    return undefined;
+  }
+
+  const base = internalDate ? new Date(Number(internalDate)) : new Date();
+  const tomorrow = /tomorrow/i.test(text);
+  const nextWeek = /next week/i.test(text);
+  const explicitDate = text.match(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b/i)?.[0];
+  const time = text.match(/\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b/i)?.[0];
+
+  const date = new Date(base);
+  if (tomorrow) {
+    date.setDate(date.getDate() + 1);
+  } else if (nextWeek) {
+    date.setDate(date.getDate() + 7);
+  } else if (explicitDate) {
+    const parsed = new Date(`${explicitDate} ${base.getFullYear()} ${time ?? ""}`);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+  } else {
+    return undefined;
+  }
+
+  if (time) {
+    const parsedTime = time.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+    if (parsedTime) {
+      let hours = Number(parsedTime[1]);
+      const minutes = Number(parsedTime[2] ?? "0");
+      const meridiem = parsedTime[3].toLowerCase();
+      if (meridiem === "pm" && hours < 12) {
+        hours += 12;
+      }
+      if (meridiem === "am" && hours === 12) {
+        hours = 0;
+      }
+      date.setHours(hours, minutes, 0, 0);
+    }
+  }
+
+  return date.toISOString();
+}
+
+function inferInterviewDetails(text: string) {
+  if (!/(interview|availability|schedule|screen|call|meet)/i.test(text)) {
+    return undefined;
+  }
+
+  const format = /(zoom|teams|google meet|video)/i.test(text)
+    ? "Video interview"
+    : /(phone|call)/i.test(text)
+      ? "Phone screen"
+      : "Interview";
+
+  const duration = text.match(/\b(\d{2,3})\s*(?:min|minutes)\b/i)?.[0];
+  return [format, duration].filter(Boolean).join(" - ");
+}
+
+function scoreExtraction(input: { company?: string; role?: string; status: string; snippet: string }) {
+  let score = 45;
+  if (input.company) {
+    score += 20;
+  }
+  if (input.role) {
+    score += 20;
+  }
+  if (input.status !== "saved") {
+    score += 10;
+  }
+  if (input.snippet.length > 80) {
+    score += 5;
+  }
+  return Math.min(score, 95);
 }
 
 function extractWithPatterns(text: string, patterns: RegExp[]) {

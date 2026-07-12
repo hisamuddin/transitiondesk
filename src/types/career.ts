@@ -37,6 +37,13 @@ export type Opportunity = {
   contactName?: string;
   contactChannel?: string;
   notes: string;
+  roleResponsibilities?: string[];
+  interviewStartsAt?: string;
+  interviewDetails?: string;
+  sourceSubject?: string;
+  sourceSnippet?: string;
+  sourceReceivedAt?: string;
+  extractionConfidence?: number;
   sourceAccountId?: string;
   sourceJobId?: string;
   fingerprint?: string;

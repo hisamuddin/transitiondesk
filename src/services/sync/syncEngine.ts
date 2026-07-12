@@ -21,6 +21,13 @@ export type RawJobApplication = {
   city?: string;
   contact?: string;
   notes?: string;
+  roleResponsibilities?: string[];
+  interviewStartsAt?: string;
+  interviewDetails?: string;
+  sourceSubject?: string;
+  sourceSnippet?: string;
+  sourceReceivedAt?: string;
+  extractionConfidence?: number;
   attachments?: string[];
   receivedAt?: string;
 };
@@ -78,6 +85,10 @@ const demoRawApplications: Record<SourceType, RawJobApplication[]> = {
       city: "Remote",
       contact: "Maya Chen",
       notes: "Portfolio review scheduled after recruiter screen.",
+      roleResponsibilities: ["Lead workflow redesign discovery", "Partner with product and engineering on systems", "Present design tradeoffs clearly"],
+      interviewStartsAt: "2026-07-16T14:00:00+05:30",
+      interviewDetails: "Portfolio review with product design panel.",
+      extractionConfidence: 91,
       attachments: ["resume-saas.pdf", "case-study-portfolio.pdf"]
     }
   ],
@@ -91,6 +102,8 @@ const demoRawApplications: Record<SourceType, RawJobApplication[]> = {
       city: "Bengaluru",
       contact: "Hiring Team",
       notes: "Imported from email fallback after application confirmation.",
+      roleResponsibilities: ["Improve enterprise collaboration flows", "Create accessible product experiences", "Document design decisions for distributed teams"],
+      extractionConfidence: 76,
       attachments: ["resume-enterprise.pdf"]
     }
   ],
@@ -104,6 +117,8 @@ const demoRawApplications: Record<SourceType, RawJobApplication[]> = {
       city: "Sydney or Remote",
       contact: "Nora Patel",
       notes: "Offer stage refreshed from source connection.",
+      roleResponsibilities: ["Lead product design strategy", "Mentor designers", "Drive cross-functional roadmap decisions"],
+      extractionConfidence: 88,
       attachments: ["offer-summary.pdf"]
     }
   ],
@@ -117,6 +132,8 @@ const demoRawApplications: Record<SourceType, RawJobApplication[]> = {
       city: "Bengaluru",
       contact: "Recruiting Ops",
       notes: "Imported through Shine email fallback.",
+      roleResponsibilities: ["Own product design for payment journeys", "Coordinate with PM and engineering", "Use research to improve conversion"],
+      extractionConfidence: 73,
       attachments: ["resume-leadership.pdf"]
     }
   ],
@@ -130,6 +147,8 @@ const demoRawApplications: Record<SourceType, RawJobApplication[]> = {
       city: "New York",
       contact: "Leo Grant",
       notes: "Captured from browser confirmation page.",
+      roleResponsibilities: ["Build reusable design-system patterns", "Improve component documentation", "Partner with frontend platform teams"],
+      extractionConfidence: 82,
       attachments: ["resume-saas.pdf"]
     }
   ],
@@ -143,6 +162,10 @@ const demoRawApplications: Record<SourceType, RawJobApplication[]> = {
       city: "Bengaluru",
       contact: "Anika Rao",
       notes: "Parsed from recruiter availability request.",
+      roleResponsibilities: ["Design enterprise product workflows", "Collaborate with research and engineering", "Prepare for stakeholder reviews"],
+      interviewStartsAt: "2026-07-14T11:30:00+05:30",
+      interviewDetails: "Recruiter screen parsed from availability email.",
+      extractionConfidence: 84,
       attachments: []
     }
   ],
@@ -191,6 +214,13 @@ export function normalizeApplication(raw: RawJobApplication, sourceAccountId?: s
     contactName: raw.contact,
     contactChannel: raw.contact ? providerLabels[raw.source] : undefined,
     notes: raw.notes ?? "Imported through sync engine after field normalization.",
+    roleResponsibilities: raw.roleResponsibilities,
+    interviewStartsAt: raw.interviewStartsAt,
+    interviewDetails: raw.interviewDetails,
+    sourceSubject: raw.sourceSubject,
+    sourceSnippet: raw.sourceSnippet,
+    sourceReceivedAt: raw.sourceReceivedAt,
+    extractionConfidence: raw.extractionConfidence,
     sourceAccountId,
     sourceJobId: raw.sourceJobId,
     fingerprint: buildFingerprint(raw),
@@ -231,7 +261,9 @@ export function createSourceEvent(userId: string, provider: SourceType, opportun
       company: opportunity.company,
       role: opportunity.role,
       stage: opportunity.stage,
-      sourceAccountId: opportunity.sourceAccountId
+      sourceAccountId: opportunity.sourceAccountId,
+      interviewStartsAt: opportunity.interviewStartsAt,
+      extractionConfidence: opportunity.extractionConfidence
     },
     createdAt: new Date().toISOString()
   };

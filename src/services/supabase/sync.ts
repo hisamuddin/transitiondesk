@@ -312,7 +312,16 @@ function toOpportunityRow(userId: string, opportunity: Opportunity) {
     next_action: opportunity.nextAction,
     follow_up_due_at: opportunity.followUpDueAt,
     match_score: opportunity.matchScore,
+    contact_name: opportunity.contactName,
+    contact_channel: opportunity.contactChannel,
     notes: opportunity.notes,
+    role_responsibilities: opportunity.roleResponsibilities ?? [],
+    interview_starts_at: opportunity.interviewStartsAt,
+    interview_details: opportunity.interviewDetails,
+    source_subject: opportunity.sourceSubject,
+    source_snippet: opportunity.sourceSnippet,
+    source_received_at: opportunity.sourceReceivedAt,
+    extraction_confidence: opportunity.extractionConfidence,
     source_account_id: opportunity.sourceAccountId,
     source_job_id: opportunity.sourceJobId,
     fingerprint: opportunity.fingerprint,
@@ -339,7 +348,7 @@ export async function syncConnectedAccount(userId: string | undefined, provider:
       status: "completed" as const,
       importedCount: normalized.length,
       updatedCount: normalized.length,
-      mappedFields: ["company", "role", "stage", "source", "notes", "attachments"],
+      mappedFields: ["company", "role", "stage", "source", "notes", "responsibilities", "interviewStartsAt", "attachments"],
       skippedCount: 0
     };
     await logActivity(
@@ -355,7 +364,7 @@ export async function syncConnectedAccount(userId: string | undefined, provider:
         status: "completed" as const,
         importedCount: normalized.length,
         updatedCount: normalized.length,
-        mappedFields: ["company", "role", "stage", "source", "notes", "attachments"]
+        mappedFields: ["company", "role", "stage", "source", "notes", "responsibilities", "interviewStartsAt", "attachments"]
       },
       opportunities: normalized,
       events: normalized.map((opportunity) => createSourceEvent(userId, provider, opportunity))
@@ -364,7 +373,7 @@ export async function syncConnectedAccount(userId: string | undefined, provider:
 
   try {
     const run = await createRun(userId, provider, "normalizing");
-    const mappedFields = ["company", "role", "stage", "source", "notes", "attachments"];
+    const mappedFields = ["company", "role", "stage", "source", "notes", "responsibilities", "interviewStartsAt", "attachments"];
     const rows = normalized.map((opportunity) => toOpportunityRow(userId, opportunity));
     let inserted: any[] = [];
 
@@ -468,7 +477,7 @@ export async function syncConnectedAccount(userId: string | undefined, provider:
         status: "completed" as const,
         importedCount: normalized.length,
         updatedCount: normalized.length,
-        mappedFields: ["company", "role", "stage", "source", "notes", "attachments"],
+        mappedFields: ["company", "role", "stage", "source", "notes", "responsibilities", "interviewStartsAt", "attachments"],
         skippedCount: 0,
         errorMessage: error instanceof Error ? error.message : undefined
       },

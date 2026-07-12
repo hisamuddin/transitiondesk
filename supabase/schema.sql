@@ -32,6 +32,15 @@ alter table public.opportunities
   add column if not exists source_job_id text,
   add column if not exists fingerprint text,
   add column if not exists last_source_sync_at timestamptz,
+  add column if not exists contact_name text,
+  add column if not exists contact_channel text,
+  add column if not exists role_responsibilities jsonb not null default '[]'::jsonb,
+  add column if not exists interview_starts_at timestamptz,
+  add column if not exists interview_details text,
+  add column if not exists source_subject text,
+  add column if not exists source_snippet text,
+  add column if not exists source_received_at timestamptz,
+  add column if not exists extraction_confidence integer,
   add column if not exists attachments jsonb not null default '[]'::jsonb;
 
 delete from public.opportunities older

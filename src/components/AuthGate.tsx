@@ -13,6 +13,13 @@ type AuthGateProps = {
 
 const GMAIL_PROVIDER_TOKEN_KEY = "transitiondesk.gmailProviderToken";
 const GMAIL_PROVIDER_REFRESH_TOKEN_KEY = "transitiondesk.gmailProviderRefreshToken";
+const demoUser: GoogleUser = {
+  id: "demo-user",
+  email: "demo@transitiondesk.local",
+  isAdmin: true,
+  name: "Demo User",
+  authProvider: "demo"
+};
 
 const AuthContext = createContext<GoogleUser | null>(null);
 
@@ -26,6 +33,12 @@ export function AuthGate({ children }: AuthGateProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setUser(demoUser);
+      setLoading(false);
+      return;
+    }
+
     if (Platform.OS !== "web" || !supabase) {
       setLoading(false);
       return;

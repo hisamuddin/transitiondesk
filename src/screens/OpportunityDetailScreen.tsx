@@ -66,10 +66,36 @@ export function OpportunityDetailScreen({ route }: Props) {
         <Text style={styles.cardLabel}>Next action</Text>
         <Text style={styles.action}>{opportunity.nextAction}</Text>
         <Text style={styles.meta}>Source: {opportunity.source} - Match: {opportunity.matchScore}%</Text>
+        {opportunity.extractionConfidence ? (
+          <Text style={styles.meta}>Email parse confidence: {opportunity.extractionConfidence}%</Text>
+        ) : null}
         {opportunity.lastSourceSyncAt ? (
           <Text style={styles.meta}>Last sync: {new Date(opportunity.lastSourceSyncAt).toLocaleString()}</Text>
         ) : null}
       </AppCard>
+
+      {opportunity.interviewStartsAt || opportunity.interviewDetails || opportunity.roleResponsibilities?.length ? (
+        <AppCard>
+          <Text style={styles.sectionTitle}>Role intelligence</Text>
+          {opportunity.interviewStartsAt || opportunity.interviewDetails ? (
+            <>
+              <Text style={styles.rowTitle}>Interview</Text>
+              <Text style={styles.meta}>
+                {[formatDetailDate(opportunity.interviewStartsAt), opportunity.interviewDetails].filter(Boolean).join(" - ")}
+              </Text>
+            </>
+          ) : null}
+
+          {opportunity.roleResponsibilities?.length ? (
+            <>
+              <Text style={styles.subsectionTitle}>Responsibilities</Text>
+              {opportunity.roleResponsibilities.map((item) => (
+                <Text key={item} style={styles.bullet}>- {item}</Text>
+              ))}
+            </>
+          ) : null}
+        </AppCard>
+      ) : null}
 
       <AppCard>
         <Text style={styles.sectionTitle}>Documents sent</Text>
@@ -88,6 +114,11 @@ export function OpportunityDetailScreen({ route }: Props) {
 
       <AppCard>
         <Text style={styles.sectionTitle}>Sync provenance</Text>
+        {opportunity.sourceSubject ? <Text style={styles.meta}>Subject: {opportunity.sourceSubject}</Text> : null}
+        {opportunity.sourceReceivedAt ? (
+          <Text style={styles.meta}>Received: {new Date(opportunity.sourceReceivedAt).toLocaleString()}</Text>
+        ) : null}
+        {opportunity.sourceSnippet ? <Text style={styles.meta}>Snippet: {opportunity.sourceSnippet}</Text> : null}
         <Text style={styles.meta}>Fingerprint: {opportunity.fingerprint ?? "Pending sync fingerprint"}</Text>
         <Text style={styles.meta}>Source account: {opportunity.sourceAccountId ?? "Manual or unlinked source"}</Text>
         {events.slice(0, 2).map((event) => (
@@ -118,6 +149,17 @@ export function OpportunityDetailScreen({ route }: Props) {
       </Pressable>
     </Screen>
   );
+}
+
+function formatDetailDate(value?: string) {
+  if (!value) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(new Date(value));
 }
 
 const styles = StyleSheet.create({
@@ -171,6 +213,18 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 15,
     fontWeight: "800"
+  },
+  subsectionTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "900",
+    marginTop: 14
+  },
+  bullet: {
+    color: colors.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 6
   },
   score: {
     color: colors.green,
