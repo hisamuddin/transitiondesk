@@ -68,14 +68,16 @@ export function Screen({ children }: { children: ReactNode }) {
             </View>
             <Ionicons name={targetOpen ? "chevron-up" : "chevron-down"} size={16} color={colors.muted} />
           </Pressable>
-          {user?.authProvider !== "demo" ? (
-            <Pressable style={styles.iconButton} onPress={signOut}>
-              <Ionicons name="log-out-outline" size={18} color={colors.red} />
-            </Pressable>
-          ) : null}
         </View>
         {targetOpen ? (
           <View style={[styles.targetPanel, targetNeedsReview && styles.targetPanelAttention]}>
+            <View style={styles.panelHeader}>
+              <Text style={styles.panelHeading}>Profile</Text>
+              <Pressable style={styles.signOutButton} onPress={signOut}>
+                <Ionicons name="log-out-outline" size={15} color={colors.red} />
+                <Text style={styles.signOutText}>{isDemo ? "Exit demo" : "Sign out"}</Text>
+              </Pressable>
+            </View>
             <View style={styles.panelRow}>
               <Text style={styles.panelLabel}>Candidate</Text>
               <Text style={styles.panelValue}>{candidateName}</Text>
@@ -179,14 +181,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2
   },
-  iconButton: {
-    alignItems: "center",
-    backgroundColor: colors.redSoft,
-    borderRadius: 8,
-    height: 38,
-    justifyContent: "center",
-    width: 38
-  },
   targetPanel: {
     backgroundColor: colors.surface,
     borderColor: colors.line,
@@ -198,6 +192,32 @@ const styles = StyleSheet.create({
   targetPanelAttention: {
     backgroundColor: colors.amberSoft,
     borderColor: "#efd59a"
+  },
+  panelHeader: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between"
+  },
+  panelHeading: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: "900"
+  },
+  signOutButton: {
+    alignItems: "center",
+    backgroundColor: colors.redSoft,
+    borderColor: "#fecaca",
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 6,
+    minHeight: 34,
+    paddingHorizontal: 10
+  },
+  signOutText: {
+    color: colors.red,
+    fontSize: 12,
+    fontWeight: "900"
   },
   panelRow: {
     gap: 3
