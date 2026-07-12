@@ -40,6 +40,9 @@ alter table public.opportunities
   add column if not exists source_subject text,
   add column if not exists source_snippet text,
   add column if not exists source_received_at timestamptz,
+  add column if not exists source_links jsonb not null default '[]'::jsonb,
+  add column if not exists job_posting_url text,
+  add column if not exists application_url text,
   add column if not exists extraction_confidence integer,
   add column if not exists attachments jsonb not null default '[]'::jsonb;
 

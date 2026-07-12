@@ -27,6 +27,9 @@ export type RawJobApplication = {
   sourceSubject?: string;
   sourceSnippet?: string;
   sourceReceivedAt?: string;
+  sourceLinks?: string[];
+  jobPostingUrl?: string;
+  applicationUrl?: string;
   extractionConfidence?: number;
   attachments?: string[];
   receivedAt?: string;
@@ -217,10 +220,13 @@ export function normalizeApplication(raw: RawJobApplication, sourceAccountId?: s
     roleResponsibilities: raw.roleResponsibilities,
     interviewStartsAt: raw.interviewStartsAt,
     interviewDetails: raw.interviewDetails,
-    sourceSubject: raw.sourceSubject,
-    sourceSnippet: raw.sourceSnippet,
-    sourceReceivedAt: raw.sourceReceivedAt,
-    extractionConfidence: raw.extractionConfidence,
+      sourceSubject: raw.sourceSubject,
+      sourceSnippet: raw.sourceSnippet,
+      sourceReceivedAt: raw.sourceReceivedAt,
+      sourceLinks: raw.sourceLinks,
+      jobPostingUrl: raw.jobPostingUrl,
+      applicationUrl: raw.applicationUrl,
+      extractionConfidence: raw.extractionConfidence,
     sourceAccountId,
     sourceJobId: raw.sourceJobId,
     fingerprint: buildFingerprint(raw),
@@ -262,6 +268,8 @@ export function createSourceEvent(userId: string, provider: SourceType, opportun
       role: opportunity.role,
       stage: opportunity.stage,
       sourceAccountId: opportunity.sourceAccountId,
+      jobPostingUrl: opportunity.jobPostingUrl,
+      applicationUrl: opportunity.applicationUrl,
       interviewStartsAt: opportunity.interviewStartsAt,
       extractionConfidence: opportunity.extractionConfidence
     },

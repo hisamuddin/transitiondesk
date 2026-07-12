@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AppCard } from "../components/AppCard";
 import { useAuthUser } from "../components/AuthGate";
@@ -104,6 +104,14 @@ export function OpportunityDetailScreen({ route }: Props) {
           <Text style={styles.score}>{resume.matchScore}%</Text>
         </View>
         <Text style={styles.meta}>{resume.focus}</Text>
+        {opportunity.attachments?.length ? (
+          <>
+            <Text style={styles.subsectionTitle}>Email attachments</Text>
+            {opportunity.attachments.map((attachment) => (
+              <Text key={attachment} style={styles.bullet}>- {attachment}</Text>
+            ))}
+          </>
+        ) : null}
       </AppCard>
 
       <AppCard>
@@ -119,6 +127,26 @@ export function OpportunityDetailScreen({ route }: Props) {
           <Text style={styles.meta}>Received: {new Date(opportunity.sourceReceivedAt).toLocaleString()}</Text>
         ) : null}
         {opportunity.sourceSnippet ? <Text style={styles.meta}>Snippet: {opportunity.sourceSnippet}</Text> : null}
+        {opportunity.jobPostingUrl ? (
+          <Pressable style={styles.linkButton} onPress={() => Linking.openURL(opportunity.jobPostingUrl!)}>
+            <Text style={styles.linkButtonText}>Open job posting</Text>
+          </Pressable>
+        ) : null}
+        {opportunity.applicationUrl && opportunity.applicationUrl !== opportunity.jobPostingUrl ? (
+          <Pressable style={styles.linkButton} onPress={() => Linking.openURL(opportunity.applicationUrl!)}>
+            <Text style={styles.linkButtonText}>Open application link</Text>
+          </Pressable>
+        ) : null}
+        {opportunity.sourceLinks?.length ? (
+          <>
+            <Text style={styles.subsectionTitle}>Links found in email</Text>
+            {opportunity.sourceLinks.slice(0, 4).map((link) => (
+              <Pressable key={link} onPress={() => Linking.openURL(link)}>
+                <Text style={styles.inlineLink} numberOfLines={2}>{link}</Text>
+              </Pressable>
+            ))}
+          </>
+        ) : null}
         <Text style={styles.meta}>Fingerprint: {opportunity.fingerprint ?? "Pending sync fingerprint"}</Text>
         <Text style={styles.meta}>Source account: {opportunity.sourceAccountId ?? "Manual or unlinked source"}</Text>
         {events.slice(0, 2).map((event) => (
@@ -225,6 +253,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     marginTop: 6
+  },
+  linkButton: {
+    alignItems: "center",
+    backgroundColor: colors.blue,
+    borderRadius: 8,
+    justifyContent: "center",
+    marginTop: 12,
+    minHeight: 42,
+    paddingHorizontal: 12
+  },
+  linkButtonText: {
+    color: colors.surface,
+    fontSize: 13,
+    fontWeight: "900"
+  },
+  inlineLink: {
+    color: colors.blue,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 7
   },
   score: {
     color: colors.green,

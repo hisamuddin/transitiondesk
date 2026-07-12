@@ -43,6 +43,9 @@ export type Opportunity = {
   sourceSubject?: string;
   sourceSnippet?: string;
   sourceReceivedAt?: string;
+  sourceLinks?: string[];
+  jobPostingUrl?: string;
+  applicationUrl?: string;
   extractionConfidence?: number;
   sourceAccountId?: string;
   sourceJobId?: string;

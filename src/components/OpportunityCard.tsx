@@ -35,6 +35,7 @@ export function OpportunityCard({ opportunity, onPress }: OpportunityCardProps) 
       || opportunity.interviewStartsAt
       || opportunity.interviewDetails
       || opportunity.sourceSubject
+      || opportunity.jobPostingUrl
       || opportunity.extractionConfidence
   );
 
@@ -86,6 +87,13 @@ export function OpportunityCard({ opportunity, onPress }: OpportunityCardProps) 
             <View style={styles.previewRow}>
               <Text style={styles.previewLabel}>Email</Text>
               <Text style={styles.previewValue} numberOfLines={2}>{opportunity.sourceSubject}</Text>
+            </View>
+          ) : null}
+
+          {opportunity.jobPostingUrl ? (
+            <View style={styles.previewRow}>
+              <Text style={styles.previewLabel}>Job link</Text>
+              <Text style={styles.previewValue} numberOfLines={1}>{opportunity.jobPostingUrl}</Text>
             </View>
           ) : null}
 

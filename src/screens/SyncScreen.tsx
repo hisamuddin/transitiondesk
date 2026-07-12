@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { AppCard } from "../components/AppCard";
-import { useAuthUser } from "../components/AuthGate";
+import { useAuthUser, useSignOut } from "../components/AuthGate";
 import { MetricCard } from "../components/MetricCard";
 import { Screen } from "../components/Screen";
 import { logActivity } from "../services/supabase/activity";
@@ -24,6 +24,7 @@ const GMAIL_PROVIDER_REFRESH_TOKEN_KEY = "transitiondesk.gmailProviderRefreshTok
 
 export function SyncScreen() {
   const user = useAuthUser();
+  const signOut = useSignOut();
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [runs, setRuns] = useState<SyncRun[]>([]);
   const [loading, setLoading] = useState(true);
@@ -168,6 +169,16 @@ export function SyncScreen() {
     }
   }
 
+  async function handleSignOut() {
+    setError("");
+
+    try {
+      await signOut();
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Could not sign out.");
+    }
+  }
+
   const visibleAccounts = accounts.filter((account) => providerOrder.includes(account.provider));
   const visibleRuns = runs.filter((run) => providerOrder.includes(run.source));
   const health = summarizeSyncHealth(visibleAccounts, visibleRuns);
@@ -177,7 +188,13 @@ export function SyncScreen() {
       <View>
         <Text style={styles.eyebrow}>Unified sync</Text>
         <Text style={styles.title}>Honest sync sources</Text>
+        {user?.email ? <Text style={styles.accountText}>Signed in as {user.email}</Text> : null}
       </View>
+
+      <Pressable style={styles.signOutButton} onPress={handleSignOut}>
+        <Ionicons name="log-out-outline" size={16} color={colors.red} />
+        <Text style={styles.signOutButtonText}>Sign out and refresh token</Text>
+      </Pressable>
 
       <View style={styles.metrics}>
         <MetricCard label="Sources" value={health.activePortalCount} caption="connected" />
@@ -397,6 +414,29 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: "900",
     marginTop: 4
+  },
+  accountText: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 6
+  },
+  signOutButton: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: colors.surface,
+    borderColor: colors.redSoft,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 42,
+    paddingHorizontal: 12
+  },
+  signOutButtonText: {
+    color: colors.red,
+    fontSize: 13,
+    fontWeight: "900"
   },
   metrics: {
     flexDirection: "row",

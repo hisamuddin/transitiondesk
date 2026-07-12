@@ -21,9 +21,14 @@ const demoUser: GoogleUser = {
 };
 
 const AuthContext = createContext<GoogleUser | null>(null);
+const SignOutContext = createContext<() => Promise<void>>(async () => undefined);
 
 export function useAuthUser() {
   return useContext(AuthContext);
+}
+
+export function useSignOut() {
+  return useContext(SignOutContext);
 }
 
 export function AuthGate({ children }: AuthGateProps) {
@@ -176,6 +181,19 @@ function readStoredToken(key: string) {
   }
 }
 
+function clearStoredGmailToken() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.removeItem(GMAIL_PROVIDER_TOKEN_KEY);
+    window.sessionStorage.removeItem(GMAIL_PROVIDER_REFRESH_TOKEN_KEY);
+  } catch {
+    // Session storage can be unavailable in private or restricted browser contexts.
+  }
+}
+
   async function signInWithGoogle() {
     if (!supabase) {
       return;
@@ -197,6 +215,21 @@ function readStoredToken(key: string) {
     }
   }
 
+  async function signOut() {
+    clearStoredGmailToken();
+
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
+
+    setUser(null);
+    setError("");
+
+    if (typeof window !== "undefined") {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }
+
   if (loading) {
     return (
       <View style={styles.page}>
@@ -206,7 +239,11 @@ function readStoredToken(key: string) {
   }
 
   if (user || Platform.OS !== "web") {
-    return <AuthContext.Provider value={user}>{children}</AuthContext.Provider>;
+    return (
+      <AuthContext.Provider value={user}>
+        <SignOutContext.Provider value={signOut}>{children}</SignOutContext.Provider>
+      </AuthContext.Provider>
+    );
   }
 
   return (
