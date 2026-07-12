@@ -28,14 +28,26 @@ type GmailProfile = {
   threadsTotal: number;
 };
 
+type GoogleTokenInfo = {
+  scope?: string;
+  expires_in?: string;
+  error?: string;
+  error_description?: string;
+};
+
 const GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me";
+const GOOGLE_TOKENINFO_URL = "https://www.googleapis.com/oauth2/v3/tokeninfo";
 const GMAIL_MESSAGE_LIMIT = 12;
+const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
 export async function fetchGmailProfile(accessToken: string) {
+  await assertGmailScope(accessToken);
   return gmailFetch<GmailProfile>(`${GMAIL_API_BASE}/profile`, accessToken);
 }
 
 export async function fetchGmailApplications(accessToken: string) {
+  await assertGmailScope(accessToken);
+
   const query = "newer_than:365d (application OR applied OR interview OR recruiter OR hiring OR offer)";
   const list = await gmailFetch<GmailMessageListResponse>(
     `${GMAIL_API_BASE}/messages?${new URLSearchParams({
@@ -66,6 +78,23 @@ export async function fetchGmailApplications(accessToken: string) {
   return applications;
 }
 
+async function assertGmailScope(accessToken: string) {
+  const response = await fetch(`${GOOGLE_TOKENINFO_URL}?${new URLSearchParams({ access_token: accessToken }).toString()}`);
+  const tokenInfo = (await response.json().catch(() => ({}))) as GoogleTokenInfo;
+
+  if (!response.ok || tokenInfo.error) {
+    const description = tokenInfo.error_description ?? tokenInfo.error ?? "Google could not validate the Gmail token.";
+    throw new Error(`Google token check failed: ${description}. Click Connect Gmail and approve Gmail inbox access again.`);
+  }
+
+  const scopes = new Set((tokenInfo.scope ?? "").split(/\s+/).filter(Boolean));
+  if (!scopes.has(GMAIL_READONLY_SCOPE)) {
+    throw new Error(
+      `Google token is missing Gmail scope. Received scopes: ${tokenInfo.scope || "none"}. Click Connect Gmail and approve Gmail inbox access.`
+    );
+  }
+}
+
 async function gmailFetch<T>(url: string, accessToken: string) {
   const response = await fetch(url, {
     headers: {
@@ -75,9 +104,9 @@ async function gmailFetch<T>(url: string, accessToken: string) {
 
   if (!response.ok) {
     const body = await response.text();
-    const detail = safeMessage(body);
+    const detail = safeGoogleError(body);
     if (response.status === 401 || response.status === 403) {
-      throw new Error("Gmail access is missing or expired. Reconnect Google and grant Gmail inbox access.");
+      throw new Error(`Gmail API rejected the request (${response.status}): ${detail}`);
     }
     throw new Error(detail ?? `Gmail request failed with status ${response.status}.`);
   }
@@ -231,10 +260,12 @@ function isGenericSender(sender: string, source: SourceType) {
   return false;
 }
 
-function safeMessage(body: string) {
+function safeGoogleError(body: string) {
   try {
-    const parsed = JSON.parse(body) as { error?: { message?: string } };
-    return parsed.error?.message ?? body;
+    const parsed = JSON.parse(body) as { error?: { message?: string; status?: string; details?: Array<{ reason?: string }> } };
+    const reason = parsed.error?.details?.map((detail) => detail.reason).filter(Boolean).join(", ");
+    const status = parsed.error?.status;
+    return [parsed.error?.message, status, reason ? `reason: ${reason}` : ""].filter(Boolean).join(" ");
   } catch {
     return body;
   }
